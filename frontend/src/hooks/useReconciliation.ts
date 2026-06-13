@@ -10,31 +10,35 @@ export interface ReconciliationResult {
 
 export function useReconciliation() {
   const [iocFile, setIocFile] = useState<File | null>(null);
-  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [topImage, setTopImage] = useState<File | null>(null);   // Top-down breadboard photo
+  const [sideImage, setSideImage] = useState<File | null>(null); // Side/profile breadboard photo
   const [parts, setParts] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [statusText, setStatusText] = useState('');
   const [result, setResult] = useState<ReconciliationResult | null>(null);
 
+  const canRun = !!(iocFile && topImage && sideImage);
+
   const runReconciliation = async () => {
-    if (!iocFile || !imageFile) return;
+    if (!iocFile || !topImage || !sideImage) return;
 
     setIsProcessing(true);
     setStatusText('Parsing .ioc layout...');
-    
-    // Simulate a multi-step backend process
-    setTimeout(() => setStatusText('Analyzing breadboard image...'), 1000);
-    setTimeout(() => setStatusText('Integrating component manifest...'), 1800);
-    setTimeout(() => setStatusText('Reconciling graphs...'), 2400);
+
+    setTimeout(() => setStatusText('Analyzing top-view image...'), 1000);
+    setTimeout(() => setStatusText('Analyzing side-view image...'), 1800);
+    setTimeout(() => setStatusText('Integrating component manifest...'), 2600);
+    setTimeout(() => setStatusText('Reconciling graphs...'), 3400);
 
     try {
-      // EXPLICIT AXIOS CALL FOR FUTURE BACKEND SWAP
       const formData = new FormData();
       formData.append('ioc_file', iocFile);
-      formData.append('image_file', imageFile);
+      formData.append('top_image', topImage);
+      formData.append('side_image', sideImage);
       formData.append('parts', JSON.stringify(parts));
+
       const response = await axios.post('http://127.0.0.1:8000/api/reconcile', formData);
-      
+
       setResult({
         confidence: response.data.confidence,
         log: response.data.reasoning_log,
@@ -51,17 +55,18 @@ export function useReconciliation() {
   };
 
   return {
-    iocFile,
-    setIocFile,
-    imageFile,
-    setImageFile,
-    parts,
-    setParts,
-    isProcessing,
-    statusText,
-    result,
-    runReconciliation,
-    reset: () => { setResult(null); setIocFile(null); setImageFile(null); setParts([]); }
+    iocFile, setIocFile,
+    topImage, setTopImage,
+    sideImage, setSideImage,
+    parts, setParts,
+    isProcessing, statusText, canRun,
+    result, runReconciliation,
+    reset: () => {
+      setResult(null);
+      setIocFile(null);
+      setTopImage(null);
+      setSideImage(null);
+      setParts([]);
+    }
   };
 }
-

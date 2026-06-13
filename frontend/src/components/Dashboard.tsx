@@ -17,9 +17,10 @@ gsap.registerPlugin(ScrollTrigger)
 export function Dashboard() {
   const {
     iocFile, setIocFile,
-    imageFile, setImageFile,
+    topImage, setTopImage,
+    sideImage, setSideImage,
     parts, setParts,
-    isProcessing, statusText,
+    isProcessing, statusText, canRun,
     result, runReconciliation, reset
   } = useReconciliation()
 
@@ -100,10 +101,12 @@ export function Dashboard() {
             <div className="lg:col-span-4">
               <UploadPanel
                 iocFile={iocFile} setIocFile={setIocFile}
-                imageFile={imageFile} setImageFile={setImageFile}
+                topImage={topImage} setTopImage={setTopImage}
+                sideImage={sideImage} setSideImage={setSideImage}
                 parts={parts} setParts={setParts}
                 onRun={runReconciliation}
                 isProcessing={isProcessing}
+                canRun={canRun}
                 statusText={statusText}
               />
             </div>

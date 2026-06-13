@@ -2,10 +2,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from ai_vision.cv_layer import analyze_breadboard_from_bytes
+import asyncio
 import json
 import os
 import uuid
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,6 +15,9 @@ from services.ioc_parser import router as ioc_parser_router, parse_ioc_content
 from services.oauth3legtest import router as oauth3_router
 
 app = FastAPI(title="Hardware Recon AI Backend")
+
+UPLOAD_DIR = "uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 app.add_middleware(
     CORSMiddleware,
@@ -45,36 +49,41 @@ class ReconciliationResponse(BaseModel):
 @app.post("/api/reconcile", response_model=ReconciliationResponse)
 async def reconcile_hardware(
     ioc_file: UploadFile = File(...),
-    image_file: UploadFile = File(...),
+    top_image: UploadFile = File(...),    # Top-down view of the breadboard
+    side_image: UploadFile = File(...),   # Side profile view of the breadboard
     parts: Optional[str] = Form(None)
 ):
+    # Validate .ioc file
     if not ioc_file.filename.endswith('.ioc'):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Zone A upload must be a valid STM32 .ioc configuration file."
         )
-        
-    if not image_file.content_type.startswith('image/'):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Zone B upload must be a valid JPEG or PNG image."
-        )
+
+    # Validate both images
+    for label, img in [("top_image", top_image), ("side_image", side_image)]:
+        if not img.content_type.startswith('image/'):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"'{label}' upload must be a valid JPEG or PNG image."
+            )
 
     try:
         ioc_contents = await ioc_file.read()
-        image_bytes = await image_file.read()
+        top_bytes   = await top_image.read()
+        side_bytes  = await side_image.read()
 
-        session_id = str(uuid.uuid4())
+        session_id  = str(uuid.uuid4())
         session_dir = os.path.join(UPLOAD_DIR, session_id)
         os.makedirs(session_dir, exist_ok=True)
 
-        saved_ioc_path = os.path.join(session_dir, ioc_file.filename)
-        with open(saved_ioc_path, "wb") as f:
+        # Persist all three files with descriptive names
+        with open(os.path.join(session_dir, ioc_file.filename), "wb") as f:
             f.write(ioc_contents)
-
-        saved_image_path = os.path.join(session_dir, image_file.filename)
-        with open(saved_image_path, "wb") as f:
-            f.write(image_bytes)
+        with open(os.path.join(session_dir, f"top_{top_image.filename}"), "wb") as f:
+            f.write(top_bytes)
+        with open(os.path.join(session_dir, f"side_{side_image.filename}"), "wb") as f:
+            f.write(side_bytes)
 
     except Exception as e:
         raise HTTPException(
@@ -89,9 +98,9 @@ async def reconcile_hardware(
         except json.JSONDecodeError:
             pass
             
-    # Call the CubeMX Parser
+    # Call the CubeMX Parser asynchronously off the main thread
     ioc_text = ioc_contents.decode("utf-8", errors="replace")
-    gemini_result = parse_ioc_content(ioc_text)
+    gemini_result = await asyncio.to_thread(parse_ioc_content, ioc_text)
 
     """
     response_data = {
