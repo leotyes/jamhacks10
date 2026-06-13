@@ -1,48 +1,35 @@
-<<<<<<< HEAD
-from dotenv import load_dotenv
-load_dotenv()
-
-from fastapi import FastAPI, File, UploadFile, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-
-from ai_vision.cv_layer import analyze_breadboard_from_bytes
-=======
 import json
 import os
 import uuid
 from typing import List, Optional
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, status
+from dotenv import load_dotenv
+
+load_dotenv()
+
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+from ai_vision.cv_layer import analyze_breadboard_from_bytes
 from services.ioc_parser import router as ioc_parser_router
->>>>>>> 6164dabdda43662163d8cd69cb8fdde8464b4211
 
 app = FastAPI(title="Hardware Recon AI Backend")
 
-<<<<<<< HEAD
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-=======
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# Allow requests from Vite (local dev port)
+# Allow requests from Vite and other origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=["*"],
     allow_credentials=True,
->>>>>>> 6164dabdda43662163d8cd69cb8fdde8464b4211
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-<<<<<<< HEAD
-
 @app.get("/")
 def read_root():
     return {"message": "Hello World"}
-
 
 @app.post("/analyze")
 async def analyze_image(file: UploadFile = File(...)):
@@ -52,7 +39,7 @@ async def analyze_image(file: UploadFile = File(...)):
     image_bytes = await file.read()
     result = analyze_breadboard_from_bytes(image_bytes, mime_type=file.content_type)
     return result
-=======
+
 # Define response models
 class ReconciliationResponse(BaseModel):
     confidence: float
@@ -97,7 +84,6 @@ async def reconcile_hardware(
         with open(saved_image_path, "wb") as f:
             f.write(image_bytes)
 
-        
         # Parse the custom parts list if sent
         parsed_parts = []
         if parts:
@@ -106,11 +92,6 @@ async def reconcile_hardware(
             except json.JSONDecodeError:
                 pass # Fall back to empty list if decoding fails
 
-        # 2. Call the isolated sub-services (Stubs for now)
-        # expected_netlist = parse_ioc_to_netlist(ioc_contents)
-        # physical_netlist = extract_netlist_from_image(image_bytes)
-        # reconciliation_result = reconcile_netlists(expected_netlist, physical_netlist, parsed_parts)
-        
         # 3. Formulate the unified JSON response structure
         response_data = {
             "confidence": 0.98 if parsed_parts else 0.94,
@@ -143,6 +124,5 @@ async def reconcile_hardware(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Reconciliation engine failure: {str(e)}"
         )
-    
+
 app.include_router(ioc_parser_router, prefix="/preprocess")
->>>>>>> 6164dabdda43662163d8cd69cb8fdde8464b4211
