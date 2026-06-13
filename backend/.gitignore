@@ -1,8 +1,8 @@
 .env
 .venv
 .venv/*
-schematic_generator.net
-schematic_generator.erc
-schematic_generator.log
-schematic_generator_sklib.py
+pcb_generator.net
+pcb_generator.erc
+pcb_generator.log
+pcb_generator_sklib.py
 __pycache__/

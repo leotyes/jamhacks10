@@ -1,3 +1,7 @@
+from dotenv import load_dotenv
+load_dotenv()
+
+from ai_vision.cv_layer import analyze_breadboard_from_bytes
 import json
 import os
 import uuid
@@ -7,20 +11,32 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from services.ioc_parser import router as ioc_parser_router, parse_ioc_content
 from services.component_finder import router as component_finder_router
+from services.oauth3legtest import router as oauth3_router
 
 app = FastAPI(title="Hardware Recon AI Backend")
 
-UPLOAD_DIR = "uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-    allow_credentials=True,
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+@app.get("/")
+def read_root():
+    return {"message": "Hello World"}
+
+
+@app.post("/analyze")
+async def analyze_image(file: UploadFile = File(...)):
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="File must be an image")
+
+    image_bytes = await file.read()
+    result = analyze_breadboard_from_bytes(image_bytes, mime_type=file.content_type)
+    return result
+
+# Define response models
 class ReconciliationResponse(BaseModel):
     confidence: float
     reasoning_log: str
@@ -113,3 +129,4 @@ async def reconcile_hardware(
     
 app.include_router(ioc_parser_router, prefix="/preprocess_ioc")
 app.include_router(component_finder_router, prefix="/preprocess_component")
+app.include_router(oauth3_router, prefix="/test")

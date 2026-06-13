@@ -1,91 +1,111 @@
-import { useState } from 'react';
-import { Code2, Cpu, Network } from 'lucide-react';
+import { useState } from "react"
+import { Code2, Cpu, Network } from "lucide-react"
+import { ScrambleTextOnHover } from "./ScrambleText"
 
 interface OutputTabsProps {
-  netlist: any;
-  schematicUrl?: string;
+  netlist: any
+  schematicUrl?: string
 }
 
-export function OutputTabs({ netlist }: OutputTabsProps) {
-  const [activeTab, setActiveTab] = useState<'netlist' | 'schematic' | 'graph'>('netlist');
+const TABS = [
+  { id: "netlist", label: "Validated Netlist", icon: Code2 },
+  { id: "schematic", label: "Schematic Viewer", icon: Cpu },
+  { id: "graph", label: "Graph Explorer", icon: Network },
+] as const
 
+type TabId = typeof TABS[number]["id"]
+
+export function OutputTabs({ netlist }: OutputTabsProps) {
+  const [activeTab, setActiveTab] = useState<TabId>("netlist")
 
   return (
-    <div className="flex flex-col h-full bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-2xl shadow-black/50">
-      <div className="flex border-b border-slate-800 bg-slate-950/50">
-        <button
-          onClick={() => setActiveTab('netlist')}
-          className={`flex-1 py-3 px-4 flex items-center justify-center space-x-2 text-sm font-medium transition-colors ${
-            activeTab === 'netlist'
-              ? 'text-indigo-400 border-b-2 border-indigo-500 bg-indigo-500/5'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-          }`}
-        >
-          <Code2 className="w-4 h-4" />
-          <span>Validated Netlist</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('schematic')}
-          className={`flex-1 py-3 px-4 flex items-center justify-center space-x-2 text-sm font-medium transition-colors ${
-            activeTab === 'schematic'
-              ? 'text-emerald-400 border-b-2 border-emerald-500 bg-emerald-500/5'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-          }`}
-        >
-          <Cpu className="w-4 h-4" />
-          <span>Schematic Viewer</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('graph')}
-          className={`flex-1 py-3 px-4 flex items-center justify-center space-x-2 text-sm font-medium transition-colors ${
-            activeTab === 'graph'
-              ? 'text-cyan-400 border-b-2 border-cyan-500 bg-cyan-500/5'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-          }`}
-        >
-          <Network className="w-4 h-4" />
-          <span>Graph Explorer</span>
-        </button>
+    <div className="flex flex-col border border-border bg-background overflow-hidden">
+      {/* Tab Bar */}
+      <div className="flex border-b border-border bg-card">
+        {TABS.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            onClick={() => setActiveTab(id)}
+            className={`flex-1 py-3 px-4 flex items-center justify-center gap-2 font-mono text-xs uppercase tracking-widest transition-all duration-200 border-r border-border last:border-r-0 ${
+              activeTab === id
+                ? "text-accent bg-accent/5 border-b-0 relative after:absolute after:bottom-0 after:left-0 after:right-0 after:h-px after:bg-accent"
+                : "text-muted-foreground hover:text-foreground hover:bg-background"
+            }`}
+          >
+            <Icon className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{label}</span>
+          </button>
+        ))}
       </div>
 
-      <div className="flex-1 p-0 overflow-hidden relative bg-slate-950/50 min-h-[400px]">
-        {activeTab === 'netlist' && (
-          <div className="absolute inset-0 p-4 overflow-auto">
-            <pre className="text-sm font-mono text-slate-300">
+      {/* Content */}
+      <div className="relative min-h-[380px] flex flex-col">
+        {activeTab === "netlist" && (
+          <div className="flex-1 p-4 overflow-auto">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="h-px bg-border flex-1" />
+              <span className="font-mono text-xs uppercase tracking-widest text-muted-foreground">JSON Output</span>
+              <div className="h-px bg-border flex-1" />
+            </div>
+            <pre className="font-mono text-xs text-foreground/80 leading-relaxed">
               <code>{JSON.stringify(netlist, null, 2)}</code>
             </pre>
           </div>
         )}
 
-        {activeTab === 'schematic' && (
-          <div className="absolute inset-0 flex items-center justify-center flex-col p-8">
-            <div className="w-full max-w-lg aspect-video rounded-lg border border-slate-700 bg-slate-800/50 flex flex-col items-center justify-center relative overflow-hidden group">
-              {/* Mock Schematic Graphic */}
-              <svg viewBox="0 0 100 100" className="w-full h-full opacity-30 text-emerald-500" fill="none" stroke="currentColor" strokeWidth="1">
-                <path d="M10,50 L30,50 M30,40 L30,60 L50,60 L50,40 Z M50,50 L70,50 M70,45 L70,55 M75,45 L75,55 M75,50 L90,50" />
-                <circle cx="20" cy="50" r="2" fill="currentColor" />
-                <circle cx="80" cy="50" r="2" fill="currentColor" />
+        {activeTab === "schematic" && (
+          <div className="flex-1 flex flex-col items-center justify-center p-8 gap-6">
+            <div className="w-full max-w-lg border border-border bg-card relative overflow-hidden group">
+              {/* Mock circuit SVG */}
+              <svg viewBox="0 0 200 120" className="w-full opacity-25 text-accent" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <line x1="10" y1="60" x2="40" y2="60" />
+                <rect x="40" y="45" width="30" height="30" />
+                <text x="55" y="64" fill="currentColor" fontSize="8" textAnchor="middle" stroke="none">U1</text>
+                <line x1="70" y1="60" x2="100" y2="60" />
+                <circle cx="107" cy="60" r="7" />
+                <line x1="114" y1="60" x2="144" y2="60" />
+                <rect x="144" y="50" width="10" height="20" />
+                <line x1="154" y1="60" x2="190" y2="60" />
+                <line x1="190" y1="60" x2="190" y2="100" />
+                <line x1="10" y1="100" x2="190" y2="100" />
+                <line x1="10" y1="60" x2="10" y2="100" />
               </svg>
-              <div className="absolute inset-0 bg-slate-900/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
-                <button className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium shadow-lg transition-transform transform hover:scale-105">
-                  Download .kicad_sch
+              {/* Hover download overlay */}
+              <div className="absolute inset-0 bg-background/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 backdrop-blur-sm">
+                <button className="border border-accent text-accent font-mono text-[10px] uppercase tracking-widest px-6 py-3 hover:bg-accent hover:text-accent-foreground transition-colors">
+                  <ScrambleTextOnHover text="Download .kicad_sch" />
                 </button>
               </div>
             </div>
-            <p className="mt-6 text-slate-400 text-sm text-center max-w-md">
-              A generated KiCad schematic based on the reconciled layout. Hover to download the source file.
+            <p className="font-mono text-xs text-muted-foreground text-center uppercase tracking-widest max-w-sm">
+              Generated KiCad schematic. Hover to download source file.
             </p>
           </div>
         )}
 
-        {activeTab === 'graph' && (
-          <div className="absolute inset-0 flex items-center justify-center flex-col">
-            <Network className="w-16 h-16 text-cyan-500/20 mb-4" />
-            <h3 className="text-lg font-medium text-slate-200">NetworkX Graph Visualization</h3>
-            <p className="text-slate-500 mt-2 text-sm">Interactive node graph explorer placeholder.</p>
+        {activeTab === "graph" && (
+          <div className="flex-1 flex flex-col items-center justify-center gap-6">
+            {/* Animated node graph placeholder */}
+            <svg viewBox="0 0 200 140" className="w-64 opacity-20 text-foreground" fill="none">
+              <circle cx="100" cy="70" r="8" fill="currentColor" />
+              <circle cx="40" cy="30" r="5" fill="currentColor" />
+              <circle cx="160" cy="30" r="5" fill="currentColor" />
+              <circle cx="40" cy="110" r="5" fill="currentColor" />
+              <circle cx="160" cy="110" r="5" fill="currentColor" />
+              <line x1="100" y1="70" x2="40" y2="30" stroke="currentColor" strokeWidth="1" />
+              <line x1="100" y1="70" x2="160" y2="30" stroke="currentColor" strokeWidth="1" />
+              <line x1="100" y1="70" x2="40" y2="110" stroke="currentColor" strokeWidth="1" />
+              <line x1="100" y1="70" x2="160" y2="110" stroke="currentColor" strokeWidth="1" />
+            </svg>
+            <div className="text-center">
+              <p className="font-[family-name:var(--font-bebas)] text-2xl text-foreground tracking-tight">NETWORKX GRAPH</p>
+              <p className="font-mono text-xs text-muted-foreground mt-2 uppercase tracking-widest">
+                Interactive node graph explorer — coming soon
+              </p>
+            </div>
           </div>
         )}
       </div>
     </div>
-  );
+  )
 }
