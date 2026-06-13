@@ -8,3 +8,4 @@ pcb_generator_sklib.py
 __pycache__/
 
 schematics/
+digikey_refresh_cache.json

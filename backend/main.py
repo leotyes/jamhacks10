@@ -14,10 +14,12 @@ from pydantic import BaseModel
 from ai_vision.cv_layer import analyze_breadboard_from_bytes
 from schematic_generator import generate_schematic
 try:
-    from services.ioc_parser import router as ioc_parser_router
+    from services.ioc_parser import router as ioc_parser_router, parse_ioc_content
+    from services.oauth3legtest import router as oauth3_router
     _ioc_parser_available = True
 except Exception:
     _ioc_parser_available = False
+    parse_ioc_content = None
 
 app = FastAPI(title="Hardware Recon AI Backend")
 
@@ -100,6 +102,16 @@ async def reconcile_hardware(
             except json.JSONDecodeError:
                 pass
 
+        if _ioc_parser_available and parse_ioc_content:
+            ioc_text = ioc_contents.decode("utf-8", errors="replace")
+            gemini_result = parse_ioc_content(ioc_text)
+            return {
+                "confidence": 1.0,
+                "reasoning_log": gemini_result,
+                "netlist": {"components": [], "nets": []},
+                "schematic_url": None
+            }
+
         response_data = {
             "confidence": 0.98 if parsed_parts else 0.94,
             "reasoning_log": (
@@ -150,4 +162,5 @@ async def generate_schematic_endpoint(request: NetlistRequest):
 
 
 if _ioc_parser_available:
-    app.include_router(ioc_parser_router, prefix="/preprocess")
+    app.include_router(ioc_parser_router, prefix="/preprocess_ioc")
+    app.include_router(oauth3_router, prefix="/test")

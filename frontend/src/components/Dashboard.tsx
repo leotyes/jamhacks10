@@ -60,7 +60,7 @@ export function Dashboard() {
               <Cpu className="w-3.5 h-3.5 text-accent" />
             </div>
             <span className="font-[family-name:var(--font-bebas)] text-xl tracking-widest text-foreground">
-              HARDWARE RECON AI
+              CIRCUIT SYNC
             </span>
           </div>
 
@@ -173,7 +173,7 @@ export function Dashboard() {
         {/* Bottom status bar */}
         <footer className="relative z-10 border-t border-border/30 px-6 lg:px-10 py-3 flex items-center justify-between mt-10">
           <span className="font-mono text-xs uppercase tracking-widest text-muted-foreground/60">
-            Hardware Recon AI — JamHacks 10
+            Circuit Sync — JamHacks 10
           </span>
           <span className="font-mono text-xs uppercase tracking-widest text-muted-foreground/60">
             {result ? "● ANALYSIS COMPLETE" : isProcessing ? "● RUNNING" : "○ IDLE"}
