@@ -4,6 +4,7 @@ import random
 import re
 import time
 from pathlib import Path
+from typing import Optional
 
 from google import genai
 from google.genai import types
@@ -12,8 +13,6 @@ from pydantic import BaseModel
 MODEL = "gemini-2.5-flash"
 
 _PIN_DIAGRAMS_DIR = Path(__file__).parent / "pin_diagrams"
-_CN8_9_PATH  = _PIN_DIAGRAMS_DIR / "cn8_9.PNG"
-_CN7_10_PATH = _PIN_DIAGRAMS_DIR / "cn7_10.PNG"
 
 # ---------------------------------------------------------------------------
 # Response schema
@@ -25,12 +24,15 @@ class Component(BaseModel):
     hardware_model: str # e.g. "STM32 Nucleo-144", "PDM Mic breakout", "custom perfboard"
 
 class Connection(BaseModel):
-    from_comp:    str           # source component id
-    from_pin:     str           # pin function on source: VCC | GND | CLK | DAT
-    to_comp:      str           # destination component id (NUCLEO or CENTRAL_PERFBOARD)
-    to_header:    str           # CN7 | CN8 | CN9 | CN10 | PERFBOARD
-    to_pin_label: str           # exact GPIO label from pinout diagram, e.g. PE_9, 3V3, GND
-    wire_color:   str           # observed wire color
+    wire_id:        str
+    signal_type:    str              # VCC | GND | CLK | DAT
+    wire_color:     str
+    from_comp:      str
+    from_header:    Optional[str] = None   # CN7 | CN8 | CN9 | CN10 | PERFBOARD
+    from_pin_label: str
+    to_comp:        str
+    to_header:      Optional[str] = None   # CN7 | CN8 | CN9 | CN10 | PERFBOARD
+    to_pin_label:   str
 
 class CircuitAnalysis(BaseModel):
     circuit_description: str
@@ -42,44 +44,44 @@ class CircuitAnalysis(BaseModel):
 # ---------------------------------------------------------------------------
 
 _ANALYSIS_PROMPT = """
-You are an expert embedded systems vision engineer performing precise pin-level wiring analysis of a prototype STM32 assembly.
+You are an expert embedded systems vision engineer. Your task is to produce a flat, relational netlist — one entry per visible physical wire segment — from photos of a prototype STM32 assembly.
 
 ━━━ IMAGE CONTEXT ━━━
-You are given THREE images:
-  Image 1 — Hardware photo (top-down): hexagonal 3D-printed frame containing:
-    • NUCLEO: STM32 Nucleo-144 development board (large white PCB, blue STM logo, dual-row
-              female morpho headers on left AND right sides, ST-LINK programmer at top)
-    • CENTRAL_PERFBOARD: small custom perfboard mounted on top of the Nucleo, acting as
-              power/GND distribution hub routing 3V3 and GND to all six mics
-    • HEX_NW, HEX_NE, HEX_E, HEX_SE, HEX_S, HEX_SW: six PDM microphone breakout boards
-              (small black PCBs with 4-pin JST connectors), one at each hexagon vertex,
-              clockwise from top-left
-    • Each mic has a 4-wire harness from its JST jack: VCC (red), GND (black/blue), CLK (yellow), DAT (blue/other)
+You are given FOUR images:
+  Image 1 — Side-view photo of the board assembly.
+  Image 2 — Top-view photo of the same board assembly.
+  Use both perspectives together to resolve depth, occlusion, and wire routing ambiguities.
+  Image 3 — CN8/CN9 pinout diagram (LEFT morpho headers): reference for exact pin labels (e.g., 3V3, GND, PC_3, PE_9, PE_4).
+  Image 4 — CN7/CN10 pinout diagram (RIGHT morpho headers): reference for exact pin labels (e.g., PC_1, PC_5, PE_10, PE_12).
 
-  Image 2 — CN8 (top) + CN9 (bottom) pinout diagram: LEFT-SIDE morpho headers of the Nucleo-144.
-             Use this to identify exact GPIO/power labels for any wire terminating on the left headers.
-
-  Image 3 — CN7 (top) + CN10 (bottom) pinout diagram: RIGHT-SIDE morpho headers of the Nucleo-144.
-             Use this to identify exact GPIO/power labels for any wire terminating on the right headers.
+━━━ BOARD CONTEXT ━━━
+The assembly consists of:
+  • NUCLEO: STM32 Nucleo-144 development board with left (CN8/CN9) and right (CN7/CN10) morpho headers.
+  • CENTRAL_PERFBOARD: a custom perfboard acting as a wiring hub — all 4 lines (VCC, GND, CLK, DAT) from each microphone may route here first before jumping onward to the NUCLEO, or wires may go directly to the NUCLEO. Detect what is physically present.
+  • HEX_NW, HEX_NE, HEX_E, HEX_SE, HEX_S, HEX_SW (or however many are present): PDM microphone breakout boards at hexagonal vertices.
 
 ━━━ YOUR TASK ━━━
-Produce ONE connection entry per individual wire. For each wire:
-  1. Identify its source component and the PDM pin function (VCC / GND / CLK / DAT)
-  2. Trace it visually to where it terminates on the Nucleo header or perfboard
-  3. Cross-reference that physical header position with the pinout diagram (Images 2 or 3)
-     to determine the exact pin label (e.g. PE_9, PC_7, 3V3, GND)
-  4. Record the observed wire color
+Enumerate every distinct visible wire segment. Each segment is an independent connection object with a unique wire_id. Assign signal_type (VCC, GND, CLK, or DAT) based on the wire's function in the circuit.
+
+For each segment:
+  1. Identify the physical origin component and, if it terminates on a header or perfboard, the specific header name and pin label.
+  2. Identify the physical destination component and its header/pin label.
+  3. Cross-reference header positions against the pinout diagrams (Images 3 and 4) for exact GPIO or power labels.
+  4. Record the observed wire color.
 
 ━━━ RULES ━━━
-- Output exactly 8 components: NUCLEO, CENTRAL_PERFBOARD, and all 6 HEX_* mics
-- Output exactly 24 connections: 4 wires × 6 mics (VCC, GND, CLK, DAT each)
-  • VCC and GND wires from mics typically go to CENTRAL_PERFBOARD first, not directly to NUCLEO
-  • CLK and DAT wires go directly to NUCLEO morpho header pins
-- to_header must be one of: CN7, CN8, CN9, CN10, PERFBOARD
-- to_pin_label must be the exact label from the pinout diagram (e.g. PE_9, PA_3, 3V3, GND)
-  Use "UNKNOWN" only if the wire endpoint is genuinely not traceable
-- wire_color must be the observed color of that specific wire
-- Return ONLY the raw JSON object — no markdown fences, no extra text
+- Report ALL components you can identify; do not limit to a fixed count.
+- Report ALL wire segments you can see; do not limit to a fixed count.
+- from_header / to_header must be one of: CN7, CN8, CN9, CN10, PERFBOARD, or null if not applicable.
+- from_pin_label / to_pin_label must match the pinout diagram text exactly. Use "UNKNOWN" only when physically obscured.
+- wire_id must be unique per segment (e.g. "W01", "W02", …).
+- Your response MUST be a single JSON object with exactly these three top-level keys:
+    {
+      "circuit_description": "<one sentence summary>",
+      "components": [ ... ],
+      "connections": [ ... ]
+    }
+- Do NOT return a bare array. Do NOT wrap in markdown fences.
 """.strip()
 
 # ---------------------------------------------------------------------------
@@ -104,21 +106,25 @@ def _load_bytes(path: Path) -> bytes:
         return f.read()
 
 
-def _call_gemini(image_bytes: bytes, mime_type: str) -> CircuitAnalysis:
+def _call_gemini(hw_images: list[tuple[bytes, str]], mcu_type: str = "stm32") -> CircuitAnalysis:
     api_key = os.environ.get("GEMINI_API_KEY")
     client  = genai.Client(api_key=api_key)
     delay   = _BASE_DELAY
 
-    cn8_9_bytes  = _load_bytes(_CN8_9_PATH)
-    cn7_10_bytes = _load_bytes(_CN7_10_PATH)
+    diagram_dir  = _PIN_DIAGRAMS_DIR / mcu_type
+    cn8_9_bytes  = _load_bytes(diagram_dir / "cn8_9.PNG")
+    cn7_10_bytes = _load_bytes(diagram_dir / "cn7_10.PNG")
 
-    contents = [
-        types.Part.from_text(text=_ANALYSIS_PROMPT),
-        types.Part.from_text(text="Image 1 — Hardware photo:"),
-        types.Part.from_bytes(data=image_bytes,  mime_type=mime_type),
-        types.Part.from_text(text="Image 2 — CN8 (left-top) + CN9 (left-bottom) pinout:"),
+    labels = ["Side-view", "Top-view"] + [f"Hardware view {i+1}" for i in range(2, len(hw_images))]
+    contents = [types.Part.from_text(text=_ANALYSIS_PROMPT)]
+    for i, (img_bytes, mime_type) in enumerate(hw_images):
+        contents.append(types.Part.from_text(text=f"Image {i + 1} — {labels[i]} photo:"))
+        contents.append(types.Part.from_bytes(data=img_bytes, mime_type=mime_type))
+    ref_offset = len(hw_images) + 1
+    contents += [
+        types.Part.from_text(text=f"Image {ref_offset} — CN8/CN9 pinout (LEFT headers):"),
         types.Part.from_bytes(data=cn8_9_bytes,  mime_type="image/png"),
-        types.Part.from_text(text="Image 3 — CN7 (right-top) + CN10 (right-bottom) pinout:"),
+        types.Part.from_text(text=f"Image {ref_offset + 1} — CN7/CN10 pinout (RIGHT headers):"),
         types.Part.from_bytes(data=cn7_10_bytes, mime_type="image/png"),
     ]
 
@@ -152,13 +158,6 @@ def _call_gemini(image_bytes: bytes, mime_type: str) -> CircuitAnalysis:
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _load_image_bytes(image_path: str) -> bytes:
-    path = Path(image_path)
-    if not path.exists():
-        raise FileNotFoundError(f"Image not found: {image_path}")
-    return _load_bytes(path)
-
-
 def _mime_from_path(path: str) -> str:
     ext = Path(path).suffix.lower().lstrip(".")
     return {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "webp": "image/webp"}.get(
@@ -169,19 +168,26 @@ def _mime_from_path(path: str) -> str:
 # Public API
 # ---------------------------------------------------------------------------
 
-def analyze_board(image_path: str) -> dict:
-    image_bytes = _load_image_bytes(image_path)
-    return _run_analysis(image_bytes, _mime_from_path(image_path))
+_HW_STEMS = ("side-view", "top-view")
 
 
-def analyze_board_from_bytes(image_bytes: bytes, mime_type: str = "image/jpeg") -> dict:
-    return _run_analysis(image_bytes, mime_type)
+def analyze_board(project_folder: str, mcu_type: str = "stm32") -> dict:
+    """Analyze a project folder containing side-view and top-view photos."""
+    folder = Path(project_folder)
+    hw_images: list[tuple[bytes, str]] = []
+    for stem in _HW_STEMS:
+        matches = sorted(folder.glob(f"{stem}.*"))
+        if not matches:
+            raise FileNotFoundError(f"No image matching '{stem}.*' in {folder}")
+        path = matches[0]
+        hw_images.append((_load_bytes(path), _mime_from_path(str(path))))
+    return _call_gemini(hw_images, mcu_type=mcu_type).model_dump()
 
 
-analyze_breadboard          = analyze_board
+def analyze_board_from_bytes(images: list[tuple[bytes, str]], mcu_type: str = "stm32") -> dict:
+    """Analyze pre-loaded image bytes. Each tuple is (image_bytes, mime_type)."""
+    return _call_gemini(images, mcu_type=mcu_type).model_dump()
+
+
+analyze_breadboard            = analyze_board
 analyze_breadboard_from_bytes = analyze_board_from_bytes
-
-
-def _run_analysis(image_bytes: bytes, mime_type: str) -> dict:
-    result = _call_gemini(image_bytes, mime_type)
-    return result.model_dump()
