@@ -4,7 +4,17 @@ import time
 import os
 import json
 from dotenv import load_dotenv
+from pydantic import BaseModel
+from google import genai
+from google.genai import types
 load_dotenv()
+
+GEMINI_MODEL = "gemini-3.5-flash"
+
+
+class PinInterface(BaseModel):
+    pins: list[str]          # signal names exposed by the component, e.g. ["GND", "3V3", "CLK", "DAT"]
+    notes: str               # brief description of what each pin does / wiring notes
 
 router = APIRouter()
 
@@ -19,10 +29,7 @@ TOKEN_FILE = "digikey_refresh_cache.json"
 def load_token_cache():
     if os.path.exists(TOKEN_FILE):
         with open(TOKEN_FILE, "r") as f:
-            print("wtf")
             return json.load(f)
-    # Fallback for first run: seed from .env
-    print("hi")
     return {
         "access_token": None,
         "refresh_token": os.getenv("DIGIKEY_REFRESH_TOKEN"),
@@ -54,10 +61,10 @@ def refresh_access_token():
     data = response.json()
 
     _token_cache["access_token"] = data["access_token"]
-    _token_cache["refresh_token"] = data["refresh_token"]  # DigiKey rotates this!
+    _token_cache["refresh_token"] = data["refresh_token"]
     _token_cache["expires_at"] = time.time() + data.get("expires_in", 1800)
 
-    save_token_cache(_token_cache)  # persist immediately so restarts don't lose it
+    save_token_cache(_token_cache)
 
     return _token_cache["access_token"]
 
@@ -84,6 +91,73 @@ def product_search(keyword, token):
     )
     response.raise_for_status()
     return response.json()
+
+
+def enrich_product(product: dict) -> dict:
+    """Given the first DigiKey product match, fetch its datasheet and ask Gemini
+    to extract the pin/wire interface. Returns an enriched dict with pins + photo."""
+    description = (
+        product.get("Description", {}).get("DetailedDescription", "")
+        or product.get("Description", {}).get("ProductDescription", "")
+    )
+    datasheet_url = product.get("DatasheetUrl", "")
+    photo_url     = product.get("PhotoUrl", "")
+    product_url   = product.get("ProductUrl", "")
+    manufacturer  = product.get("Manufacturer", {}).get("Name", "")
+    part_number   = product.get("ManufacturerProductNumber", "")
+    unit_price    = product.get("UnitPrice", None)
+
+    # --- build Gemini contents ---
+    api_key = os.environ.get("GEMINI_API_KEY")
+    print(api_key)
+    client  = genai.Client(api_key=api_key)
+    contents: list = []
+
+    prompt = (
+        f"You are a hardware pin-interface extraction assistant.\n"
+        f"Component: {manufacturer} {part_number} — {description}\n\n"
+        f"Your task: identify every signal/wire that connects to this component from the "
+        f"datasheet or, if the datasheet is unavailable, from your knowledge of the part.\n"
+        f"Return a pins list with the canonical signal name for each pin (e.g. GND, 3V3, CLK, DAT, "
+        f"SEL, LR, VDD, DATA, etc.) and a brief notes string summarising wiring requirements."
+    )
+    contents.append(types.Part.from_text(text=prompt))
+
+    # attach datasheet PDF if fetchable
+    if datasheet_url:
+        if datasheet_url.startswith("//"):
+            datasheet_url = "https:" + datasheet_url
+        try:
+            pdf_resp = requests.get(datasheet_url, timeout=15)
+            pdf_resp.raise_for_status()
+            contents.append(
+                types.Part.from_bytes(
+                    data=pdf_resp.content,
+                    mime_type="application/pdf",
+                )
+            )
+        except Exception as exc:
+            print(f"[enrich_product] could not fetch datasheet ({exc}); using text-only knowledge")
+
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=contents,
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=PinInterface,
+            temperature=0.0,
+        ),
+    )
+    if response.parsed is not None:
+        pin_iface: PinInterface = response.parsed
+    else:
+        pin_iface = PinInterface.model_validate(json.loads(response.text))
+
+    return {
+        "photo_url":     photo_url,
+        "pins":          pin_iface.pins,
+        "wiring_notes":  pin_iface.notes,
+    }
 
 
 @router.get("/search")

@@ -6,8 +6,10 @@ import { ScrambleTextOnHover } from "./ScrambleText"
 interface UploadPanelProps {
   iocFile: File | null
   setIocFile: (file: File | null) => void
-  imageFile: File | null
-  setImageFile: (file: File | null) => void
+  sideImageFile: File | null
+  setSideImageFile: (file: File | null) => void
+  topImageFile: File | null
+  setTopImageFile: (file: File | null) => void
   parts: string[]
   setParts: React.Dispatch<React.SetStateAction<string[]>>
   onRun: () => void
@@ -15,41 +17,93 @@ interface UploadPanelProps {
   statusText: string
 }
 
+function ImageDropZone({
+  label,
+  file,
+  onDrop,
+}: {
+  label: string
+  file: File | null
+  onDrop: (files: File[]) => void
+}) {
+  const [preview, setPreview] = useState<string | null>(null)
+
+  const handleDrop = useCallback(
+    (acceptedFiles: File[]) => {
+      if (acceptedFiles.length > 0) {
+        const f = acceptedFiles[0]
+        onDrop([f])
+        setPreview(URL.createObjectURL(f))
+      }
+    },
+    [onDrop]
+  )
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop: handleDrop,
+    accept: { "image/*": [".jpeg", ".jpg", ".png", ".webp"] },
+    maxFiles: 1,
+  })
+
+  return (
+    <div className="flex-1 min-w-0">
+      <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-2 block">
+        {label}
+      </span>
+      <div
+        {...getRootProps()}
+        className={`relative border cursor-pointer transition-all duration-300 group overflow-hidden min-h-[120px] ${
+          isDragActive
+            ? "border-accent bg-accent/5"
+            : file
+            ? "border-accent/50"
+            : "border-border hover:border-accent/40 bg-card"
+        }`}
+      >
+        <input {...getInputProps()} />
+        {preview ? (
+          <>
+            <img src={preview} alt="Preview" className="w-full h-28 object-cover opacity-50" />
+            <div className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-sm">
+              <div className="flex flex-col items-center gap-1.5 px-2 text-center">
+                <CheckCircle2 className="w-4 h-4 text-accent shrink-0" />
+                <p className="font-mono text-[10px] text-foreground leading-tight break-all">{file?.name}</p>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-col items-center justify-center gap-2 p-4 h-[120px]">
+            <div className="w-8 h-8 border border-border flex items-center justify-center group-hover:border-accent/40 transition-colors">
+              <ImageIcon className="w-4 h-4 text-muted-foreground" />
+            </div>
+            <div className="text-center">
+              <p className="font-mono text-xs text-foreground">Drop photo here</p>
+              <p className="font-mono text-[10px] text-muted-foreground mt-0.5">JPEG · PNG · WEBP</p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function UploadPanel({
-  iocFile, setIocFile, imageFile, setImageFile,
-  parts, setParts, onRun, isProcessing, statusText
+  iocFile, setIocFile,
+  sideImageFile, setSideImageFile,
+  topImageFile, setTopImageFile,
+  parts, setParts, onRun, isProcessing, statusText,
 }: UploadPanelProps) {
-  const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [newPart, setNewPart] = useState("")
 
   const onDropIoc = useCallback((acceptedFiles: File[]) => {
-    const validFiles = acceptedFiles.filter(file => file.name.toLowerCase().endsWith('.ioc'))
-    if (validFiles.length > 0) {
-      setIocFile(validFiles[0])
-    }
+    const valid = acceptedFiles.filter(f => f.name.toLowerCase().endsWith(".ioc"))
+    if (valid.length > 0) setIocFile(valid[0])
   }, [setIocFile])
-
-  const onDropImage = useCallback((acceptedFiles: File[]) => {
-    if (acceptedFiles.length > 0) {
-      const file = acceptedFiles[0]
-      setImageFile(file)
-      setImagePreview(URL.createObjectURL(file))
-    }
-  }, [setImageFile])
 
   const { getRootProps: getIocRootProps, getInputProps: getIocInputProps, isDragActive: isIocDragActive } = useDropzone({
     onDrop: onDropIoc,
-    accept: {
-      "application/octet-stream": [".ioc"],
-      "text/plain": [".ioc"]
-    },
-    maxFiles: 1
-  })
-
-  const { getRootProps: getImageRootProps, getInputProps: getImageInputProps, isDragActive: isImageDragActive } = useDropzone({
-    onDrop: onDropImage,
-    accept: { "image/*": [".jpeg", ".jpg", ".png"] },
-    maxFiles: 1
+    accept: { "application/octet-stream": [".ioc"], "text/plain": [".ioc"] },
+    maxFiles: 1,
   })
 
   const handleAddPart = (e: React.FormEvent) => {
@@ -62,7 +116,7 @@ export function UploadPanel({
 
   const formatFileSize = (bytes: number) => (bytes / 1024).toFixed(1) + " KB"
 
-  const canRun = iocFile && imageFile && !isProcessing
+  const canRun = iocFile && sideImageFile && topImageFile && !isProcessing
 
   return (
     <div className="flex flex-col gap-8">
@@ -117,43 +171,22 @@ export function UploadPanel({
         </div>
       </div>
 
-      {/* Image Drop Zone */}
+      {/* Image Drop Zones — side by side */}
       <div>
         <span className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-3 block">
-          B / Breadboard Photo
+          B / Board Photos
         </span>
-        <div
-          {...getImageRootProps()}
-          className={`relative border cursor-pointer transition-all duration-300 group overflow-hidden min-h-[140px] ${
-            isImageDragActive
-              ? "border-accent bg-accent/5"
-              : imageFile
-              ? "border-accent/50"
-              : "border-border hover:border-accent/40 bg-card"
-          }`}
-        >
-          <input {...getImageInputProps()} />
-          {imagePreview ? (
-            <>
-              <img src={imagePreview} alt="Preview" className="w-full h-36 object-cover opacity-50" />
-              <div className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-sm">
-                <div className="flex items-center gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-accent" />
-                  <p className="font-mono text-sm text-foreground">{imageFile?.name}</p>
-                </div>
-              </div>
-            </>
-          ) : (
-            <div className="flex items-center gap-4 p-6">
-              <div className="w-10 h-10 border border-border flex items-center justify-center group-hover:border-accent/40 transition-colors">
-                <ImageIcon className="w-5 h-5 text-muted-foreground" />
-              </div>
-              <div>
-                <p className="font-mono text-sm text-foreground">Drop breadboard photo here</p>
-                <p className="font-mono text-[10px] text-muted-foreground mt-0.5">JPEG or PNG</p>
-              </div>
-            </div>
-          )}
+        <div className="flex gap-3">
+          <ImageDropZone
+            label="Side View"
+            file={sideImageFile}
+            onDrop={([f]) => setSideImageFile(f)}
+          />
+          <ImageDropZone
+            label="Top View"
+            file={topImageFile}
+            onDrop={([f]) => setTopImageFile(f)}
+          />
         </div>
       </div>
 
@@ -209,7 +242,7 @@ export function UploadPanel({
         onClick={onRun}
         disabled={!canRun}
         className={`w-full py-4 flex items-center justify-center gap-3 border font-mono text-sm uppercase tracking-[0.2em] transition-all duration-300 ${
-          !iocFile || !imageFile
+          !iocFile || !sideImageFile || !topImageFile
             ? "border-border/30 text-muted-foreground/30 cursor-not-allowed bg-card"
             : isProcessing
             ? "border-accent/50 text-accent bg-accent/5 cursor-wait"

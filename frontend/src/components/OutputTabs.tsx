@@ -26,11 +26,10 @@ export function OutputTabs({ netlist }: OutputTabsProps) {
           <button
             key={id}
             onClick={() => setActiveTab(id)}
-            className={`flex-1 py-3 px-4 flex items-center justify-center gap-2 font-mono text-xs uppercase tracking-widest transition-all duration-200 border-r border-border last:border-r-0 ${
-              activeTab === id
+            className={`flex-1 py-3 px-4 flex items-center justify-center gap-2 font-mono text-xs uppercase tracking-widest transition-all duration-200 border-r border-border last:border-r-0 ${activeTab === id
                 ? "text-accent bg-accent/5 border-b-0 relative after:absolute after:bottom-0 after:left-0 after:right-0 after:h-px after:bg-accent"
                 : "text-muted-foreground hover:text-foreground hover:bg-background"
-            }`}
+              }`}
           >
             <Icon className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">{label}</span>

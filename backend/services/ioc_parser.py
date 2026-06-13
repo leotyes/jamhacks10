@@ -1,3 +1,5 @@
+from dotenv import load_dotenv
+load_dotenv()
 from fastapi import APIRouter
 from google import genai
 from pathlib import Path

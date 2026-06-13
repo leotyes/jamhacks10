@@ -1,0 +1,167 @@
+FUSION_PROMPT = """You are an electronics engineer reconciling three data sources describing a single physical circuit into a structured JSON netlist.
+
+SOURCE 1 — IOC (STM32CubeMX MCU pin configuration, software/peripheral intent):
+{ioc_result}
+
+SOURCE 2 — CV (computer vision analysis of the actual physical breadboard wiring):
+{cv_result}
+
+SOURCE 3 — DigiKey (part metadata for non-MCU components):
+{digikey_result}
+
+RECONCILIATION RULES:
+1. For actual electrical connections (which pin physically connects to which), use SOURCE 2 (CV) as ground truth.
+2. Cross-reference each CV-reported MCU pin against SOURCE 1's pin_map to determine its configured peripheral function. Use this to name nets meaningfully.
+3. If a CV pin has NO corresponding entry in SOURCE 1's pin_map, name the net based on CV's signal_type/pin_label instead, and set "iocFunction": null with a note explaining it's unconfigured.
+4. If SOURCE 1 and SOURCE 2 disagree on which MCU pin carries a given signal (including near-matches like "PC3" vs "PC3_C"), trust SOURCE 2 (CV) for the connection, but record the discrepancy in "notes".
+5. Use SOURCE 3 (DigiKey) to determine pin names/count for each non-MCU component. Match DigiKey pin names to CV pin_labels, allowing naming variants (e.g. "VDD"/"3V"/"VCC" are the same supply pin).
+6. Any component acting purely as a passive junction/hub (e.g. a perfboard) should NOT appear as a component. Merge wires passing through it into single shared nets.
+
+OUTPUT REQUIREMENTS:
+- Output ONLY valid JSON matching the schema below. No markdown fences, no explanation outside the JSON.
+- "components": one entry per physical part (MCU + each instance, even if they share a hardware_model). Each has an "id" (use CV's id), "type", "hardware_model", and "pins" (a dict mapping this component's pin names to net names).
+- "nets": one entry per electrically distinct signal, with "name", "description" (resolved IOC function or reasoning), and "connections" (list of "componentId.pinName" strings).
+- "notes": list of strings describing any discrepancies found per rule 4, or unconfigured pins per rule 3.
+
+EXAMPLE — for a 6-microphone PDM array on an STM32H7A3 connected via DFSDM1, given inputs structured like SOURCES 1-3 above, a correct output looks like this:
+
+```json
+{{
+  "components": [
+    {{
+      "id": "NUCLEO",
+      "type": "MCU_BOARD",
+      "hardware_model": "NUCLEO-H7A3ZI-Q",
+      "pins": {{
+        "3V3": "VCC_3V3",
+        "GND": "GND",
+        "PE9": "DFSDM1_CKOUT",
+        "PC3": "DFSDM1_DATIN1_PC3",
+        "PE10": "DFSDM1_DATIN4",
+        "PE12": "DFSDM1_DATIN5",
+        "PE4": "DFSDM1_DATIN3",
+        "PC5": "DFSDM1_DATIN2",
+        "PC1": "DFSDM1_DATIN0"
+      }}
+    }},
+    {{
+      "id": "HEX_N",
+      "type": "MICROPHONE",
+      "hardware_model": "Adafruit 4346 PDM Microphone",
+      "pins": {{
+        "VDD": "VCC_3V3",
+        "GND": "GND",
+        "CLK": "DFSDM1_CKOUT",
+        "DAT": "DFSDM1_DATIN1_PC3"
+      }}
+    }},
+    {{
+      "id": "HEX_NE",
+      "type": "MICROPHONE",
+      "hardware_model": "Adafruit 4346 PDM Microphone",
+      "pins": {{
+        "VDD": "VCC_3V3",
+        "GND": "GND",
+        "CLK": "DFSDM1_CKOUT",
+        "DAT": "DFSDM1_DATIN4"
+      }}
+    }},
+    {{
+      "id": "HEX_SE",
+      "type": "MICROPHONE",
+      "hardware_model": "Adafruit 4346 PDM Microphone",
+      "pins": {{
+        "VDD": "VCC_3V3",
+        "GND": "GND",
+        "CLK": "DFSDM1_CKOUT",
+        "DAT": "DFSDM1_DATIN5"
+      }}
+    }},
+    {{
+      "id": "HEX_S",
+      "type": "MICROPHONE",
+      "hardware_model": "Adafruit 4346 PDM Microphone",
+      "pins": {{
+        "VDD": "VCC_3V3",
+        "GND": "GND",
+        "CLK": "DFSDM1_CKOUT",
+        "DAT": "DFSDM1_DATIN3"
+      }}
+    }},
+    {{
+      "id": "HEX_SW",
+      "type": "MICROPHONE",
+      "hardware_model": "Adafruit 4346 PDM Microphone",
+      "pins": {{
+        "VDD": "VCC_3V3",
+        "GND": "GND",
+        "CLK": "DFSDM1_CKOUT",
+        "DAT": "DFSDM1_DATIN2"
+      }}
+    }},
+    {{
+      "id": "HEX_NW",
+      "type": "MICROPHONE",
+      "hardware_model": "Adafruit 4346 PDM Microphone",
+      "pins": {{
+        "VDD": "VCC_3V3",
+        "GND": "GND",
+        "CLK": "DFSDM1_CKOUT",
+        "DAT": "DFSDM1_DATIN0"
+      }}
+    }}
+  ],
+  "nets": [
+    {{
+      "name": "VCC_3V3",
+      "description": "Shared 3.3V supply, bussed through perfboard to all mics",
+      "connections": ["NUCLEO.3V3", "HEX_N.VDD", "HEX_NE.VDD", "HEX_SE.VDD", "HEX_S.VDD", "HEX_SW.VDD", "HEX_NW.VDD"]
+    }},
+    {{
+      "name": "GND",
+      "description": "Shared ground, bussed through perfboard to all mics",
+      "connections": ["NUCLEO.GND", "HEX_N.GND", "HEX_NE.GND", "HEX_SE.GND", "HEX_S.GND", "HEX_SW.GND", "HEX_NW.GND"]
+    }},
+    {{
+      "name": "DFSDM1_CKOUT",
+      "description": "IOC: DFSDM1_CKOUT on PE9, bussed through perfboard to all mic CLK pins",
+      "connections": ["NUCLEO.PE9", "HEX_N.CLK", "HEX_NE.CLK", "HEX_SE.CLK", "HEX_S.CLK", "HEX_SW.CLK", "HEX_NW.CLK"]
+    }},
+    {{
+      "name": "DFSDM1_DATIN0",
+      "description": "IOC: DFSDM1_DATIN0 on PC1",
+      "connections": ["NUCLEO.PC1", "HEX_NW.DAT"]
+    }},
+    {{
+      "name": "DFSDM1_DATIN1_PC3",
+      "description": "IOC: DFSDM1_DATIN1 configured on PC3_C, but CV shows wired to PC3",
+      "connections": ["NUCLEO.PC3", "HEX_N.DAT"]
+    }},
+    {{
+      "name": "DFSDM1_DATIN2",
+      "description": "IOC: DFSDM1_DATIN2 on PC5",
+      "connections": ["NUCLEO.PC5", "HEX_SW.DAT"]
+    }},
+    {{
+      "name": "DFSDM1_DATIN3",
+      "description": "IOC: DFSDM1_DATIN3 on PE4",
+      "connections": ["NUCLEO.PE4", "HEX_S.DAT"]
+    }},
+    {{
+      "name": "DFSDM1_DATIN4",
+      "description": "IOC: DFSDM1_DATIN4 on PE10",
+      "connections": ["NUCLEO.PE10", "HEX_NE.DAT"]
+    }},
+    {{
+      "name": "DFSDM1_DATIN5",
+      "description": "IOC: DFSDM1_DATIN5 on PE12",
+      "connections": ["NUCLEO.PE12", "HEX_SE.DAT"]
+    }}
+  ],
+  "notes": [
+    "IOC pin_map lists DFSDM1_DATIN1 on PC3_C, but CV shows HEX_N's DAT wired to PC3 (different pin) -- net DFSDM1_DATIN1_PC3 reflects CV wiring."
+  ]
+}}
+```
+
+Return only the JSON for the actual input data, no markdown fences, following this same structure."""
