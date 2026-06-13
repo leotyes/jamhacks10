@@ -13,8 +13,6 @@ from pydantic import BaseModel
 MODEL = "gemini-2.5-flash"
 
 _PIN_DIAGRAMS_DIR = Path(__file__).parent / "pin_diagrams"
-_CN8_9_PATH  = _PIN_DIAGRAMS_DIR / "cn8_9.PNG"
-_CN7_10_PATH = _PIN_DIAGRAMS_DIR / "cn7_10.PNG"
 
 # ---------------------------------------------------------------------------
 # Response schema
@@ -108,13 +106,14 @@ def _load_bytes(path: Path) -> bytes:
         return f.read()
 
 
-def _call_gemini(hw_images: list[tuple[bytes, str]]) -> CircuitAnalysis:
+def _call_gemini(hw_images: list[tuple[bytes, str]], mcu_type: str = "stm32") -> CircuitAnalysis:
     api_key = os.environ.get("GEMINI_API_KEY")
     client  = genai.Client(api_key=api_key)
     delay   = _BASE_DELAY
 
-    cn8_9_bytes  = _load_bytes(_CN8_9_PATH)
-    cn7_10_bytes = _load_bytes(_CN7_10_PATH)
+    diagram_dir  = _PIN_DIAGRAMS_DIR / mcu_type
+    cn8_9_bytes  = _load_bytes(diagram_dir / "cn8_9.PNG")
+    cn7_10_bytes = _load_bytes(diagram_dir / "cn7_10.PNG")
 
     labels = ["Side-view", "Top-view"] + [f"Hardware view {i+1}" for i in range(2, len(hw_images))]
     contents = [types.Part.from_text(text=_ANALYSIS_PROMPT)]
@@ -172,7 +171,7 @@ def _mime_from_path(path: str) -> str:
 _HW_STEMS = ("side-view", "top-view")
 
 
-def analyze_board(project_folder: str) -> dict:
+def analyze_board(project_folder: str, mcu_type: str = "stm32") -> dict:
     """Analyze a project folder containing side-view and top-view photos."""
     folder = Path(project_folder)
     hw_images: list[tuple[bytes, str]] = []
@@ -182,12 +181,12 @@ def analyze_board(project_folder: str) -> dict:
             raise FileNotFoundError(f"No image matching '{stem}.*' in {folder}")
         path = matches[0]
         hw_images.append((_load_bytes(path), _mime_from_path(str(path))))
-    return _call_gemini(hw_images).model_dump()
+    return _call_gemini(hw_images, mcu_type=mcu_type).model_dump()
 
 
-def analyze_board_from_bytes(images: list[tuple[bytes, str]]) -> dict:
+def analyze_board_from_bytes(images: list[tuple[bytes, str]], mcu_type: str = "stm32") -> dict:
     """Analyze pre-loaded image bytes. Each tuple is (image_bytes, mime_type)."""
-    return _call_gemini(images).model_dump()
+    return _call_gemini(images, mcu_type=mcu_type).model_dump()
 
 
 analyze_breadboard            = analyze_board
