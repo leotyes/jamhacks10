@@ -12,26 +12,28 @@ from pydantic import BaseModel
 
 MODEL = "gemini-2.5-flash"
 
-_PIN_DIAGRAMS_DIR = Path(__file__).parent / "pin_diagrams"
+_PIN_DIAGRAMS_DIR  = Path(__file__).parent / "pin_diagrams"
+_STM32_PINOUT_DIR  = _PIN_DIAGRAMS_DIR / "stm32"
+_RPI5_PINOUT_DIR   = _PIN_DIAGRAMS_DIR / "rpi5"
 
 # ---------------------------------------------------------------------------
 # Response schema
 # ---------------------------------------------------------------------------
 
 class Component(BaseModel):
-    id: str             # NUCLEO | CENTRAL_PERFBOARD | HEX_NW | HEX_NE | HEX_E | HEX_SE | HEX_S | HEX_SW
-    type: str           # mcu_development_board | perfboard | sensor_module | other
-    hardware_model: str # e.g. "STM32 Nucleo-144", "PDM Mic breakout", "custom perfboard"
+    id: str             # NUCLEO | CENTRAL_PERFBOARD | HEX_* | RPI5 | SSD1309 | OLED_IIC | …
+    type: str           # mcu_development_board | perfboard | sensor_module | display | other
+    hardware_model: str
 
 class Connection(BaseModel):
     wire_id:        str
-    signal_type:    str              # VCC | GND | CLK | DAT
+    signal_type:    str              # VCC | GND | CLK | DAT | SDA | SCL | …
     wire_color:     str
     from_comp:      str
-    from_header:    Optional[str] = None   # CN7 | CN8 | CN9 | CN10 | PERFBOARD
+    from_header:    Optional[str] = None
     from_pin_label: str
     to_comp:        str
-    to_header:      Optional[str] = None   # CN7 | CN8 | CN9 | CN10 | PERFBOARD
+    to_header:      Optional[str] = None
     to_pin_label:   str
 
 class CircuitAnalysis(BaseModel):
@@ -39,11 +41,14 @@ class CircuitAnalysis(BaseModel):
     components: list[Component]
     connections: list[Connection]
 
-# ---------------------------------------------------------------------------
-# Prompt
-# ---------------------------------------------------------------------------
+# Board-detection prompt (cheap single-image call)
+_DETECT_PROMPT = """Look at this hardware photo and identify the primary development board.
+Respond with ONLY one of these two exact strings — nothing else:
+  STM32   — if the main board is an STM32 Nucleo-144 (large white PCB, blue STM logo, dual morpho headers)
+  RPI5    — if the main board is a Raspberry Pi 5 (green PCB, Raspberry Pi branding, 40-pin GPIO header)""".strip()
 
-_ANALYSIS_PROMPT = """
+# STM32 analysis prompt
+_STM32_ANALYSIS_PROMPT = """
 You are an expert embedded systems vision engineer. Your task is to produce a flat, relational netlist — one entry per visible physical wire segment — from photos of a prototype STM32 assembly.
 
 ━━━ IMAGE CONTEXT ━━━
@@ -84,10 +89,48 @@ For each segment:
 - Do NOT return a bare array. Do NOT wrap in markdown fences.
 """.strip()
 
-# ---------------------------------------------------------------------------
-# Retry wrapper
-# ---------------------------------------------------------------------------
+# RPi5 analysis prompt
+_RPI5_ANALYSIS_PROMPT = """
+You are an expert embedded systems vision engineer. Your task is to produce a flat, relational netlist — one entry per visible physical wire segment — from photos of a Raspberry Pi 5 assembly.
 
+━━━ IMAGE CONTEXT ━━━
+You are given THREE images:
+  Image 1 — Side-view photo of the board assembly (RPi5).
+  Image 2 — Top-view photo of the same board assembly.
+  Use both perspectives together to resolve depth, occlusion, and wire routing ambiguities.
+  Image 3 — RPi5 GPIO pinout diagram: reference for exact pin labels (e.g., GPIO2/SDA, GPIO3/SCL, 3V3, GND, and physical pin numbers).
+
+━━━ BOARD CONTEXT ━━━
+The assembly consists of:
+  • RPI5: Raspberry Pi 5 single-board computer with a 40-pin GPIO header.
+  • SSD1309: SSD1309 OLED display module.
+  • OLED_IIC: I2C interface adapter/breakout board for the OLED display.
+
+━━━ YOUR TASK ━━━
+Enumerate every distinct visible wire segment. Each segment is an independent connection object with a unique wire_id. Assign signal_type (VCC, GND, SDA, or SCL) based on the wire's function in the I2C circuit.
+
+For each segment:
+  1. Identify the physical origin component and its specific pin label.
+  2. Identify the physical destination component and its pin label.
+  3. Cross-reference GPIO header positions against the pinout diagram (Image 3) for exact GPIO names and physical pin numbers.
+  4. Record the observed wire color.
+
+━━━ RULES ━━━
+- Report ALL components you can identify; do not limit to a fixed count.
+- Report ALL wire segments you can see; do not limit to a fixed count.
+- from_header / to_header: use "GPIO" for the RPi5 40-pin header, or null if not applicable.
+- from_pin_label / to_pin_label must match the pinout diagram exactly (e.g., "GPIO2", "GPIO3", "3V3", "GND"). Use "UNKNOWN" only when physically obscured.
+- wire_id must be unique per segment (e.g. "W01", "W02", …).
+- Your response MUST be a single JSON object with exactly these three top-level keys:
+    {
+      "circuit_description": "<one sentence summary>",
+      "components": [ ... ],
+      "connections": [ ... ]
+    }
+- Do NOT return a bare array. Do NOT wrap in markdown fences.
+""".strip()
+
+# Retry helpers
 _RETRYABLE = ("429", "quota", "resource exhausted", "rate limit", "too many requests")
 _MAX_RETRIES = 5
 _BASE_DELAY = 2.0
@@ -106,27 +149,60 @@ def _load_bytes(path: Path) -> bytes:
         return f.read()
 
 
-def _call_gemini(hw_images: list[tuple[bytes, str]], mcu_type: str = "stm32") -> CircuitAnalysis:
+def _mime_from_path(path: str) -> str:
+    ext = Path(path).suffix.lower().lstrip(".")
+    return {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "webp": "image/webp"}.get(
+        ext, "image/jpeg"
+    )
+
+# Board-type detection
+def _detect_board_type(first_image: tuple[bytes, str]) -> str:
+    """Quick single-image Gemini call — returns 'STM32' or 'RPI5'."""
+    img_bytes, mime_type = first_image
+    client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+    response = client.models.generate_content(
+        model=MODEL,
+        contents=[
+            types.Part.from_text(text=_DETECT_PROMPT),
+            types.Part.from_bytes(data=img_bytes, mime_type=mime_type),
+        ],
+        config=types.GenerateContentConfig(temperature=0.0),
+    )
+    text = response.text.strip().upper()
+    if "RPI5" in text or "RASPBERRY" in text:
+        return "RPI5"
+    return "STM32"
+
+# Gemini analysis call
+def _call_gemini(hw_images: list[tuple[bytes, str]], board_type: str) -> CircuitAnalysis:
     api_key = os.environ.get("GEMINI_API_KEY")
     client  = genai.Client(api_key=api_key)
     delay   = _BASE_DELAY
 
-    diagram_dir  = _PIN_DIAGRAMS_DIR / mcu_type
-    cn8_9_bytes  = _load_bytes(diagram_dir / "cn8_9.PNG")
-    cn7_10_bytes = _load_bytes(diagram_dir / "cn7_10.PNG")
+    if board_type == "RPI5":
+        prompt = _RPI5_ANALYSIS_PROMPT
+        pinout_parts = [
+            types.Part.from_text(text="Image 3 — RPi5 GPIO pinout diagram:"),
+            types.Part.from_bytes(
+                data=_load_bytes(_RPI5_PINOUT_DIR / "pin-numbers.jpg"),
+                mime_type="image/jpeg",
+            ),
+        ]
+    else:
+        prompt = _STM32_ANALYSIS_PROMPT
+        pinout_parts = [
+            types.Part.from_text(text="Image 3 — CN8/CN9 pinout (LEFT headers):"),
+            types.Part.from_bytes(data=_load_bytes(_STM32_PINOUT_DIR / "cn8_9.PNG"), mime_type="image/png"),
+            types.Part.from_text(text="Image 4 — CN7/CN10 pinout (RIGHT headers):"),
+            types.Part.from_bytes(data=_load_bytes(_STM32_PINOUT_DIR / "cn7_10.PNG"), mime_type="image/png"),
+        ]
 
     labels = ["Side-view", "Top-view"] + [f"Hardware view {i+1}" for i in range(2, len(hw_images))]
-    contents = [types.Part.from_text(text=_ANALYSIS_PROMPT)]
+    contents = [types.Part.from_text(text=prompt)]
     for i, (img_bytes, mime_type) in enumerate(hw_images):
         contents.append(types.Part.from_text(text=f"Image {i + 1} — {labels[i]} photo:"))
         contents.append(types.Part.from_bytes(data=img_bytes, mime_type=mime_type))
-    ref_offset = len(hw_images) + 1
-    contents += [
-        types.Part.from_text(text=f"Image {ref_offset} — CN8/CN9 pinout (LEFT headers):"),
-        types.Part.from_bytes(data=cn8_9_bytes,  mime_type="image/png"),
-        types.Part.from_text(text=f"Image {ref_offset + 1} — CN7/CN10 pinout (RIGHT headers):"),
-        types.Part.from_bytes(data=cn7_10_bytes, mime_type="image/png"),
-    ]
+    contents.extend(pinout_parts)
 
     for attempt in range(_MAX_RETRIES):
         try:
@@ -154,25 +230,12 @@ def _call_gemini(hw_images: list[tuple[bytes, str]], mcu_type: str = "stm32") ->
 
     raise RuntimeError("unreachable")
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _mime_from_path(path: str) -> str:
-    ext = Path(path).suffix.lower().lstrip(".")
-    return {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "webp": "image/webp"}.get(
-        ext, "image/jpeg"
-    )
-
-# ---------------------------------------------------------------------------
 # Public API
-# ---------------------------------------------------------------------------
-
 _HW_STEMS = ("side-view", "top-view")
 
 
-def analyze_board(project_folder: str, mcu_type: str = "stm32") -> dict:
-    """Analyze a project folder containing side-view and top-view photos."""
+def analyze_board(project_folder: str) -> dict:
+    """Detect board type, then analyze all wire segments in the project folder."""
     folder = Path(project_folder)
     hw_images: list[tuple[bytes, str]] = []
     for stem in _HW_STEMS:
@@ -181,12 +244,17 @@ def analyze_board(project_folder: str, mcu_type: str = "stm32") -> dict:
             raise FileNotFoundError(f"No image matching '{stem}.*' in {folder}")
         path = matches[0]
         hw_images.append((_load_bytes(path), _mime_from_path(str(path))))
-    return _call_gemini(hw_images, mcu_type=mcu_type).model_dump()
+
+    board_type = _detect_board_type(hw_images[0])
+    print(f"[cv_layer] detected board: {board_type}")
+    return _call_gemini(hw_images, board_type).model_dump()
 
 
-def analyze_board_from_bytes(images: list[tuple[bytes, str]], mcu_type: str = "stm32") -> dict:
-    """Analyze pre-loaded image bytes. Each tuple is (image_bytes, mime_type)."""
-    return _call_gemini(images, mcu_type=mcu_type).model_dump()
+def analyze_board_from_bytes(images: list[tuple[bytes, str]]) -> dict:
+    """Detect board type from the first image, then analyze all wire segments."""
+    board_type = _detect_board_type(images[0])
+    print(f"[cv_layer] detected board: {board_type}")
+    return _call_gemini(images, board_type).model_dump()
 
 
 analyze_breadboard            = analyze_board
