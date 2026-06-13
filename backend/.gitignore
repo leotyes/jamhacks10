@@ -6,3 +6,4 @@ pcb_generator.erc
 pcb_generator.log
 pcb_generator_sklib.py
 __pycache__/
+digikey_refresh_cache.json
