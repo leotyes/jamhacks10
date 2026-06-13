@@ -1,96 +1,78 @@
-import { Activity, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { Activity, AlertTriangle, ShieldCheck } from "lucide-react"
 
 interface DiagnosticsPanelProps {
-  confidence: number;
-  log: string;
+  confidence: number
+  log: string
 }
 
 export function DiagnosticsPanel({ confidence, log }: DiagnosticsPanelProps) {
-  const percentage = Math.round(confidence * 100);
-  
-  let colorClass = 'text-emerald-400';
-  let bgClass = 'bg-emerald-500/10 border-emerald-500/20';
-  let Icon = ShieldCheck;
-  
-  if (percentage < 80) {
-    colorClass = 'text-amber-400';
-    bgClass = 'bg-amber-500/10 border-amber-500/20';
-    Icon = AlertTriangle;
-  }
-  
-  if (percentage < 60) {
-    colorClass = 'text-red-400';
-    bgClass = 'bg-red-500/10 border-red-500/20';
-    Icon = Activity;
-  }
+  const percentage = Math.round(confidence * 100)
+
+  let Icon = ShieldCheck
+  let accentClass = "text-accent"
+  if (percentage < 80) { Icon = AlertTriangle; accentClass = "text-yellow-400" }
+  if (percentage < 60) { Icon = Activity; accentClass = "text-red-400" }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-2">
-        <h2 className="text-xl font-semibold text-slate-100">Step 2: AI Diagnostics</h2>
-        <p className="text-sm text-slate-400">Review confidence scores and detailed analysis logs.</p>
+    <div className="flex flex-col gap-8">
+      <div>
+        <span className="font-mono text-xs uppercase tracking-widest text-accent">02 / Diagnostics</span>
+        <h2 className="mt-2 font-[family-name:var(--font-bebas)] text-4xl tracking-tight text-foreground">
+          AI ANALYSIS
+        </h2>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Confidence Score Card */}
-        <div className={`p-6 rounded-xl border flex flex-col items-center justify-center space-y-4 ${bgClass}`}>
-          <div className="flex items-center space-x-2">
-            <Icon className={`w-5 h-5 ${colorClass}`} />
-            <span className="text-sm font-medium text-slate-300">Confidence Score</span>
+      <div className="h-px bg-border" />
+
+      <div className="grid grid-cols-3 gap-6">
+        {/* Confidence Score */}
+        <div className="col-span-1 border border-border bg-card p-6 flex flex-col items-center gap-4 relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-px bg-accent/60" />
+          <div className="flex items-center gap-2">
+            <Icon className={`w-4 h-4 ${accentClass}`} />
+            <span className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Confidence</span>
           </div>
-          
-          <div className="relative flex items-center justify-center">
-            {/* Simple CSS radial progress indicator */}
-            <svg className="w-32 h-32 transform -rotate-90">
+          <div className="relative w-24 h-24">
+            <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+              <circle cx="50" cy="50" r="42" stroke="currentColor" strokeWidth="6" fill="transparent" className="text-border" />
               <circle
-                cx="64"
-                cy="64"
-                r="56"
-                stroke="currentColor"
-                strokeWidth="8"
-                fill="transparent"
-                className="text-slate-800"
-              />
-              <circle
-                cx="64"
-                cy="64"
-                r="56"
-                stroke="currentColor"
-                strokeWidth="8"
-                fill="transparent"
-                strokeDasharray="351.858"
-                strokeDashoffset={351.858 - (351.858 * percentage) / 100}
-                className={`${colorClass} transition-all duration-1000 ease-out`}
-                strokeLinecap="round"
+                cx="50" cy="50" r="42"
+                stroke="currentColor" strokeWidth="6" fill="transparent"
+                strokeDasharray="263.9"
+                strokeDashoffset={263.9 - (263.9 * percentage) / 100}
+                className={`${accentClass} transition-all duration-1000 ease-out`}
+                strokeLinecap="square"
               />
             </svg>
-            <div className="absolute inset-0 flex items-center justify-center flex-col">
-              <span className={`text-3xl font-bold ${colorClass}`}>{percentage}%</span>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className={`font-[family-name:var(--font-bebas)] text-3xl ${accentClass}`}>{percentage}%</span>
             </div>
           </div>
         </div>
 
-        {/* AI Reasoning Log */}
-        <div className="lg:col-span-2 bg-slate-950 border border-slate-800 rounded-xl flex flex-col overflow-hidden relative group">
-          <div className="bg-slate-900 border-b border-slate-800 px-4 py-2 flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <div className="w-2.5 h-2.5 rounded-full bg-red-500/80"></div>
-              <div className="w-2.5 h-2.5 rounded-full bg-amber-500/80"></div>
-              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/80"></div>
+        {/* AI Log Terminal */}
+        <div className="col-span-2 border border-border bg-background flex flex-col overflow-hidden">
+          <div className="border-b border-border px-4 py-2 flex items-center justify-between bg-card">
+            <div className="flex gap-1.5">
+              <div className="w-2 h-2 bg-border" />
+              <div className="w-2 h-2 bg-border" />
+              <div className="w-2 h-2 bg-accent" />
             </div>
-            <span className="text-xs text-slate-500 font-mono">system.log</span>
+            <span className="font-mono text-xs uppercase tracking-widest text-muted-foreground">system.log</span>
           </div>
-          <div className="p-4 overflow-y-auto max-h-[160px] font-mono text-sm leading-relaxed text-slate-300">
-            {log.split('\n').map((line, i) => (
-              <div key={i} className="mb-1">
-                <span className="text-slate-600 mr-3 select-none">{String(i + 1).padStart(2, '0')}</span>
-                {line}
+          <div className="p-4 overflow-y-auto max-h-44 flex-1 relative">
+            {log.split("\n").map((line, i) => (
+              <div key={i} className="flex gap-3 mb-1.5">
+                <span className="font-mono text-xs text-muted-foreground/60 select-none w-5 shrink-0 text-right">
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                <span className="font-mono text-xs text-foreground/80 leading-relaxed">{line}</span>
               </div>
             ))}
+            <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-background to-transparent pointer-events-none" />
           </div>
-          <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-slate-950 to-transparent pointer-events-none"></div>
         </div>
       </div>
     </div>
-  );
+  )
 }
