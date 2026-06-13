@@ -1,43 +1,53 @@
-<<<<<<< HEAD
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, File, UploadFile, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-
-from ai_vision.cv_layer import analyze_breadboard_from_bytes
-=======
 import json
 import os
 import uuid
 from typing import List, Optional
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, status
+
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from services.ioc_parser import router as ioc_parser_router
->>>>>>> 6164dabdda43662163d8cd69cb8fdde8464b4211
+
+from ai_vision.cv_layer import analyze_breadboard_from_bytes
+from schematic_generator import generate_schematic
+try:
+    from services.ioc_parser import router as ioc_parser_router
+    _ioc_parser_available = True
+except Exception:
+    _ioc_parser_available = False
 
 app = FastAPI(title="Hardware Recon AI Backend")
 
-<<<<<<< HEAD
+UPLOAD_DIR = "uploads"
+SCHEMATICS_DIR = "schematics"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(SCHEMATICS_DIR, exist_ok=True)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-=======
-UPLOAD_DIR = "uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-# Allow requests from Vite (local dev port)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
     allow_credentials=True,
->>>>>>> 6164dabdda43662163d8cd69cb8fdde8464b4211
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-<<<<<<< HEAD
+
+# ---------- Models ----------
+
+class ReconciliationResponse(BaseModel):
+    confidence: float
+    reasoning_log: str
+    netlist: dict
+    schematic_url: Optional[str] = None
+
+class NetlistRequest(BaseModel):
+    netlist: dict
+
+
+# ---------- Endpoints ----------
 
 @app.get("/")
 def read_root():
@@ -48,31 +58,22 @@ def read_root():
 async def analyze_image(file: UploadFile = File(...)):
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File must be an image")
-
     image_bytes = await file.read()
     result = analyze_breadboard_from_bytes(image_bytes, mime_type=file.content_type)
     return result
-=======
-# Define response models
-class ReconciliationResponse(BaseModel):
-    confidence: float
-    reasoning_log: str
-    netlist: dict
-    schematic_url: Optional[str] = None
+
 
 @app.post("/api/reconcile", response_model=ReconciliationResponse)
 async def reconcile_hardware(
     ioc_file: UploadFile = File(...),
     image_file: UploadFile = File(...),
-    parts: Optional[str] = Form(None)  # Received as a serialized JSON string
+    parts: Optional[str] = Form(None)
 ):
-    # 1. Validation checks on incoming files
     if not ioc_file.filename.endswith('.ioc'):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Zone A upload must be a valid STM32 .ioc configuration file."
         )
-        
     if not image_file.content_type.startswith('image/'):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -80,38 +81,25 @@ async def reconcile_hardware(
         )
 
     try:
-        # Read file contents into memory
         ioc_contents = await ioc_file.read()
         image_bytes = await image_file.read()
 
-        # 2. Persist files to disk for processing
         session_id = str(uuid.uuid4())
         session_dir = os.path.join(UPLOAD_DIR, session_id)
         os.makedirs(session_dir, exist_ok=True)
 
-        saved_ioc_path = os.path.join(session_dir, ioc_file.filename)
-        with open(saved_ioc_path, "wb") as f:
+        with open(os.path.join(session_dir, ioc_file.filename), "wb") as f:
             f.write(ioc_contents)
-
-        saved_image_path = os.path.join(session_dir, image_file.filename)
-        with open(saved_image_path, "wb") as f:
+        with open(os.path.join(session_dir, image_file.filename), "wb") as f:
             f.write(image_bytes)
 
-        
-        # Parse the custom parts list if sent
         parsed_parts = []
         if parts:
             try:
                 parsed_parts = json.loads(parts)
             except json.JSONDecodeError:
-                pass # Fall back to empty list if decoding fails
+                pass
 
-        # 2. Call the isolated sub-services (Stubs for now)
-        # expected_netlist = parse_ioc_to_netlist(ioc_contents)
-        # physical_netlist = extract_netlist_from_image(image_bytes)
-        # reconciliation_result = reconcile_netlists(expected_netlist, physical_netlist, parsed_parts)
-        
-        # 3. Formulate the unified JSON response structure
         response_data = {
             "confidence": 0.98 if parsed_parts else 0.94,
             "reasoning_log": (
@@ -123,19 +111,18 @@ async def reconcile_hardware(
             ),
             "netlist": {
                 "components": [
-                    { "id": "U1", "type": "STM32F401" },
-                    { "id": "D1", "type": "LED", "color": "Red" },
-                    { "id": "R1", "type": "Resistor", "value": "220Ω" }
+                    {"id": "U1", "type": "STM32F401"},
+                    {"id": "D1", "type": "LED", "color": "Red"},
+                    {"id": "R1", "type": "Resistor", "value": "220Ω"}
                 ],
                 "nets": [
-                    { "id": "N1", "nodes": ["U1.PA5", "D1.A"] },
-                    { "id": "N2", "nodes": ["D1.K", "R1.1"] },
-                    { "id": "GND", "nodes": ["R1.2", "U1.GND"] }
+                    {"id": "N1", "nodes": ["U1.PA5", "D1.A"]},
+                    {"id": "N2", "nodes": ["D1.K", "R1.1"]},
+                    {"id": "GND", "nodes": ["R1.2", "U1.GND"]}
                 ]
             },
             "schematic_url": "/static/schematics/output_schematic.kicad_sch"
         }
-        
         return response_data
 
     except Exception as e:
@@ -143,6 +130,24 @@ async def reconcile_hardware(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Reconciliation engine failure: {str(e)}"
         )
-    
-app.include_router(ioc_parser_router, prefix="/preprocess")
->>>>>>> 6164dabdda43662163d8cd69cb8fdde8464b4211
+
+
+@app.post("/generate-schematic")
+async def generate_schematic_endpoint(request: NetlistRequest):
+    output_path = os.path.join(SCHEMATICS_DIR, f"circuit_{uuid.uuid4().hex[:8]}.kicad_sch")
+    try:
+        generate_schematic(request.netlist, output_file=output_path)
+        return FileResponse(
+            output_path,
+            media_type="application/octet-stream",
+            filename="circuit.kicad_sch"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+if _ioc_parser_available:
+    app.include_router(ioc_parser_router, prefix="/preprocess")

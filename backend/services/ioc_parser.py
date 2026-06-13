@@ -5,7 +5,7 @@ from pathlib import Path
 import os
 
 CUBEMXPROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "CubeMXPrompt.txt"
-cubemxprompt = CUBEMXPROMPT_PATH.read_text()
+cubemxprompt = CUBEMXPROMPT_PATH.read_text(encoding="utf-8")
 
 router = APIRouter()
 client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
