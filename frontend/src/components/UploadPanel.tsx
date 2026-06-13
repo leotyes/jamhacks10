@@ -52,13 +52,12 @@ function ImageDropZone({
       </span>
       <div
         {...getRootProps()}
-        className={`relative border cursor-pointer transition-all duration-300 group overflow-hidden min-h-[120px] ${
-          isDragActive
-            ? "border-accent bg-accent/5"
-            : file
+        className={`relative border cursor-pointer transition-all duration-300 group overflow-hidden min-h-[120px] ${isDragActive
+          ? "border-accent bg-accent/5"
+          : file
             ? "border-accent/50"
             : "border-border hover:border-accent/40 bg-card"
-        }`}
+          }`}
       >
         <input {...getInputProps()} />
         {preview ? (
@@ -138,13 +137,12 @@ export function UploadPanel({
         </span>
         <div
           {...getIocRootProps()}
-          className={`relative border p-6 cursor-pointer transition-all duration-300 group ${
-            isIocDragActive
-              ? "border-accent bg-accent/5"
-              : iocFile
+          className={`relative border p-6 cursor-pointer transition-all duration-300 group ${isIocDragActive
+            ? "border-accent bg-accent/5"
+            : iocFile
               ? "border-accent/50 bg-accent/5"
               : "border-border hover:border-accent/40 bg-card"
-          }`}
+            }`}
         >
           <input {...getIocInputProps()} />
           {iocFile ? (
@@ -241,13 +239,12 @@ export function UploadPanel({
       <button
         onClick={onRun}
         disabled={!canRun}
-        className={`w-full py-4 flex items-center justify-center gap-3 border font-mono text-sm uppercase tracking-[0.2em] transition-all duration-300 ${
-          !iocFile || !sideImageFile || !topImageFile
-            ? "border-border/30 text-muted-foreground/30 cursor-not-allowed bg-card"
-            : isProcessing
+        className={`w-full py-4 flex items-center justify-center gap-3 border font-mono text-sm uppercase tracking-[0.2em] transition-all duration-300 ${!iocFile || !sideImageFile || !topImageFile
+          ? "border-border/30 text-muted-foreground/30 cursor-not-allowed bg-card"
+          : isProcessing
             ? "border-accent/50 text-accent bg-accent/5 cursor-wait"
             : "border-accent text-accent-foreground bg-accent hover:opacity-90"
-        }`}
+          }`}
       >
         {isProcessing ? (
           <>
