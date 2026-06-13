@@ -11,7 +11,7 @@ from fastapi import FastAPI, File, UploadFile, HTTPException, Form, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from services.ioc_parser import router as ioc_parser_router, parse_ioc_content
-from services.oauth3legtest import router as oauth3_router
+from services.oauth3legtest import router as oauth3_router, get_access_token, product_search
 
 app = FastAPI(title="Hardware Recon AI Backend")
 
@@ -36,7 +36,7 @@ async def analyze_image(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="File must be an image")
 
     image_bytes = await file.read()
-    result = analyze_breadboard_from_bytes(image_bytes, mime_type=file.content_type)
+    result = analyze_breadboard_from_bytes([(image_bytes, file.content_type)])
     return result
 
 # Define response models
@@ -72,18 +72,15 @@ async def reconcile_hardware(
         session_dir = os.path.join(UPLOAD_DIR, session_id)
         os.makedirs(session_dir, exist_ok=True)
 
-        saved_ioc_path = os.path.join(session_dir, ioc_file.filename)
-        with open(saved_ioc_path, "wb") as f:
+        with open(os.path.join(session_dir, ioc_file.filename), "wb") as f:
             f.write(ioc_contents)
-
-        saved_image_path = os.path.join(session_dir, image_file.filename)
-        with open(saved_image_path, "wb") as f:
+        with open(os.path.join(session_dir, image_file.filename), "wb") as f:
             f.write(image_bytes)
 
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Reconciliation engine failure: {str(e)}"
+            detail=f"File I/O failure: {str(e)}"
         )
 
     parsed_parts = []
@@ -92,41 +89,33 @@ async def reconcile_hardware(
             parsed_parts = json.loads(parts)
         except json.JSONDecodeError:
             pass
-            
-    # Call the CubeMX Parser
-    ioc_text = ioc_contents.decode("utf-8", errors="replace")
-    gemini_result = parse_ioc_content(ioc_text)
 
-    """
-    response_data = {
-        "confidence": 0.98 if parsed_parts else 0.94,
-        "reasoning_log": (
-            "✅ Analysis Complete\n------------------\n"
-            f"Loaded manifest parts: {', '.join(parsed_parts) if parsed_parts else 'None'}\n"
-            "Parsed 32 active controller pins from .ioc.\n"
-            "Vision Engine located: 1x LED, 1x Resistor.\n"
-            "Reconciled layout matching is correct."
-        ),
-        "netlist": {
-            "components": [
-                { "id": "U1", "type": "STM32F401" },
-                { "id": "D1", "type": "LED", "color": "Red" },
-                { "id": "R1", "type": "Resistor", "value": "220Ω" }
-            ],
-            "nets": [
-                { "id": "N1", "nodes": ["U1.PA5", "D1.A"] },
-                { "id": "N2", "nodes": ["D1.K", "R1.1"] },
-                { "id": "GND", "nodes": ["R1.2", "U1.GND"] }
-            ]
-        },
-        "schematic_url": "/static/schematics/output_schematic.kicad_sch"
-    }
-    """
-    
+    # 1. CV — flat wire-segment netlist from the hardware photo
+    cv_result = analyze_breadboard_from_bytes([(image_bytes, image_file.content_type)])
+
+    # 2. DigiKey keyword search — one call per part in the manifest
+    parts_search_results = {}
+    if parsed_parts:
+        try:
+            token = get_access_token()
+            for part in parsed_parts:
+                try:
+                    parts_search_results[part] = product_search(part, token)
+                except Exception as e:
+                    parts_search_results[part] = {"error": str(e)}
+        except Exception as e:
+            parts_search_results = {"error": f"DigiKey auth failed: {str(e)}"}
+
+    # 3. IOC — CubeMX pin-assignment analysis
+    ioc_text = ioc_contents.decode("utf-8", errors="replace")
+    ioc_result = parse_ioc_content(ioc_text)
+
+    # TODO: run fusion on cv_result, parts_search_results, ioc_result
+
     return {
         "confidence": 1.0,
-        "reasoning_log": gemini_result,
-        "netlist": {"components": [], "nets": []},
+        "reasoning_log": ioc_result,
+        "netlist": cv_result,
         "schematic_url": None
     }
     
