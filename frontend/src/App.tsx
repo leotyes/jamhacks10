@@ -1,8 +1,11 @@
 import { Dashboard } from './components/Dashboard';
+import { SmoothScroll } from './components/SmoothScroll';
 
 function App() {
   return (
-    <Dashboard />
+    <SmoothScroll>
+      <Dashboard />
+    </SmoothScroll>
   );
 }
 
