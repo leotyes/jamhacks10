@@ -1,0 +1,10 @@
+{
+  "components": ["Battery", "Resistor", "LED", "NPN"],
+  "connections": [
+    {"from": "Battery.positive",  "to": "Resistor.pin1"},
+    {"from": "Resistor.pin2",     "to": "LED.anode"},
+    {"from": "LED.cathode",       "to": "NPN.collector"},
+    {"from": "NPN.emitter",       "to": "Battery.negative"},
+    {"from": "NPN.base",          "to": "Resistor.pin2"}
+  ]
+}

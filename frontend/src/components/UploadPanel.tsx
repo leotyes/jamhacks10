@@ -23,7 +23,10 @@ export function UploadPanel({
   const [newPart, setNewPart] = useState("")
 
   const onDropIoc = useCallback((acceptedFiles: File[]) => {
-    if (acceptedFiles.length > 0) setIocFile(acceptedFiles[0])
+    const validFiles = acceptedFiles.filter(file => file.name.toLowerCase().endsWith('.ioc'))
+    if (validFiles.length > 0) {
+      setIocFile(validFiles[0])
+    }
   }, [setIocFile])
 
   const onDropImage = useCallback((acceptedFiles: File[]) => {
@@ -36,7 +39,10 @@ export function UploadPanel({
 
   const { getRootProps: getIocRootProps, getInputProps: getIocInputProps, isDragActive: isIocDragActive } = useDropzone({
     onDrop: onDropIoc,
-    accept: { "application/octet-stream": [".ioc"] },
+    accept: {
+      "application/octet-stream": [".ioc"],
+      "text/plain": [".ioc"]
+    },
     maxFiles: 1
   })
 
