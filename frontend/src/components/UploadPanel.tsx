@@ -1,214 +1,227 @@
-import React, { useCallback, useState } from 'react';
-import { useDropzone } from 'react-dropzone';
-import { FileCode, Image as ImageIcon, CheckCircle2, UploadCloud, Loader2, Plus, X, Package } from 'lucide-react';
+import { Loader2, UploadCloud, FileCode, Image as ImageIcon, CheckCircle2, Plus, X, Package } from "lucide-react"
+import { useCallback, useState } from "react"
+import { useDropzone } from "react-dropzone"
+import { ScrambleTextOnHover } from "./ScrambleText"
 
 interface UploadPanelProps {
-  iocFile: File | null;
-  setIocFile: (file: File | null) => void;
-  imageFile: File | null;
-  setImageFile: (file: File | null) => void;
-  parts: string[];
-  setParts: React.Dispatch<React.SetStateAction<string[]>>;
-  onRun: () => void;
-  isProcessing: boolean;
-  statusText: string;
+  iocFile: File | null
+  setIocFile: (file: File | null) => void
+  imageFile: File | null
+  setImageFile: (file: File | null) => void
+  parts: string[]
+  setParts: React.Dispatch<React.SetStateAction<string[]>>
+  onRun: () => void
+  isProcessing: boolean
+  statusText: string
 }
 
 export function UploadPanel({
-  iocFile,
-  setIocFile,
-  imageFile,
-  setImageFile,
-  parts,
-  setParts,
-  onRun,
-  isProcessing,
-  statusText
+  iocFile, setIocFile, imageFile, setImageFile,
+  parts, setParts, onRun, isProcessing, statusText
 }: UploadPanelProps) {
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [newPart, setNewPart] = useState('');
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [newPart, setNewPart] = useState("")
 
   const onDropIoc = useCallback((acceptedFiles: File[]) => {
-    if (acceptedFiles.length > 0) {
-      setIocFile(acceptedFiles[0]);
-    }
-  }, [setIocFile]);
+    if (acceptedFiles.length > 0) setIocFile(acceptedFiles[0])
+  }, [setIocFile])
 
   const onDropImage = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {
-      const file = acceptedFiles[0];
-      setImageFile(file);
-      const objectUrl = URL.createObjectURL(file);
-      setImagePreview(objectUrl);
+      const file = acceptedFiles[0]
+      setImageFile(file)
+      setImagePreview(URL.createObjectURL(file))
     }
-  }, [setImageFile]);
+  }, [setImageFile])
 
   const { getRootProps: getIocRootProps, getInputProps: getIocInputProps, isDragActive: isIocDragActive } = useDropzone({
     onDrop: onDropIoc,
-    accept: { 'application/octet-stream': ['.ioc'] },
+    accept: { "application/octet-stream": [".ioc"] },
     maxFiles: 1
-  });
+  })
 
   const { getRootProps: getImageRootProps, getInputProps: getImageInputProps, isDragActive: isImageDragActive } = useDropzone({
     onDrop: onDropImage,
-    accept: { 'image/*': ['.jpeg', '.jpg', '.png'] },
+    accept: { "image/*": [".jpeg", ".jpg", ".png"] },
     maxFiles: 1
-  });
+  })
 
   const handleAddPart = (e: React.FormEvent) => {
-    e.preventDefault();
+    e.preventDefault()
     if (newPart.trim()) {
-      setParts(prev => [...prev, newPart.trim()]);
-      setNewPart('');
+      setParts(prev => [...prev, newPart.trim()])
+      setNewPart("")
     }
-  };
+  }
 
-  const handleRemovePart = (indexToRemove: number) => {
-    setParts(prev => prev.filter((_, idx) => idx !== indexToRemove));
-  };
+  const formatFileSize = (bytes: number) => (bytes / 1024).toFixed(1) + " KB"
 
-  const formatFileSize = (bytes: number) => {
-    return (bytes / 1024).toFixed(2) + ' KB';
-  };
+  const canRun = iocFile && imageFile && !isProcessing
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-2">
-        <h2 className="text-xl font-semibold text-slate-100">Step 1: Upload Layout, Image & Parts</h2>
-        <p className="text-sm text-slate-400">Provide configuration, a breadboard photo, and any specific component identifiers.</p>
+    <div className="flex flex-col gap-8">
+      {/* Section header */}
+      <div>
+        <span className="font-mono text-xs uppercase tracking-widest text-accent">01 / Inputs</span>
+        <h2 className="mt-2 font-[family-name:var(--font-bebas)] text-4xl tracking-tight text-foreground">
+          UPLOAD FILES
+        </h2>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Zone A: IOC File */}
+      {/* Divider */}
+      <div className="h-px bg-border" />
+
+      {/* IOC Drop Zone */}
+      <div>
+        <span className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-3 block">
+          A / STM32 Configuration
+        </span>
         <div
           {...getIocRootProps()}
-          className={`relative overflow-hidden flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-xl transition-all cursor-pointer ${
-            isIocDragActive ? 'border-indigo-500 bg-indigo-500/10' : iocFile ? 'border-emerald-500/50 bg-emerald-500/5' : 'border-slate-700 hover:border-slate-500 bg-slate-900/50'
+          className={`relative border p-6 cursor-pointer transition-all duration-300 group ${
+            isIocDragActive
+              ? "border-accent bg-accent/5"
+              : iocFile
+              ? "border-accent/50 bg-accent/5"
+              : "border-border hover:border-accent/40 bg-card"
           }`}
         >
           <input {...getIocInputProps()} />
           {iocFile ? (
-            <div className="flex flex-col items-center text-center space-y-2">
-              <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center">
-                <CheckCircle2 className="w-6 h-6 text-emerald-400" />
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 border border-accent/40 flex items-center justify-center bg-accent/10">
+                <CheckCircle2 className="w-5 h-5 text-accent" />
               </div>
               <div>
-                <p className="text-sm font-medium text-slate-200">{iocFile.name}</p>
-                <p className="text-xs text-slate-400">{formatFileSize(iocFile.size)}</p>
+                <p className="font-mono text-sm text-foreground">{iocFile.name}</p>
+                <p className="font-mono text-[10px] text-muted-foreground mt-0.5">{formatFileSize(iocFile.size)}</p>
               </div>
             </div>
           ) : (
-            <div className="flex flex-col items-center text-center space-y-2">
-              <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center mb-2">
-                <FileCode className="w-6 h-6 text-slate-400" />
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 border border-border flex items-center justify-center group-hover:border-accent/40 transition-colors">
+                <FileCode className="w-5 h-5 text-muted-foreground" />
               </div>
-              <p className="text-sm font-medium text-slate-300">Drag & drop your .ioc file</p>
-              <p className="text-xs text-slate-500">or click to browse</p>
+              <div>
+                <p className="font-mono text-sm text-foreground">Drop .ioc file here</p>
+                <p className="font-mono text-[10px] text-muted-foreground mt-0.5">or click to browse</p>
+              </div>
             </div>
           )}
         </div>
+      </div>
 
-        {/* Zone B: Image File */}
+      {/* Image Drop Zone */}
+      <div>
+        <span className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-3 block">
+          B / Breadboard Photo
+        </span>
         <div
           {...getImageRootProps()}
-          className={`relative overflow-hidden flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-xl transition-all cursor-pointer min-h-[160px] ${
-            isImageDragActive ? 'border-indigo-500 bg-indigo-500/10' : imageFile ? 'border-emerald-500/50' : 'border-slate-700 hover:border-slate-500 bg-slate-900/50'
+          className={`relative border cursor-pointer transition-all duration-300 group overflow-hidden min-h-[140px] ${
+            isImageDragActive
+              ? "border-accent bg-accent/5"
+              : imageFile
+              ? "border-accent/50"
+              : "border-border hover:border-accent/40 bg-card"
           }`}
         >
           <input {...getImageInputProps()} />
           {imagePreview ? (
-            <div className="absolute inset-0 w-full h-full">
-              <img src={imagePreview} alt="Preview" className="w-full h-full object-cover opacity-60" />
-              <div className="absolute inset-0 bg-slate-950/40 flex items-center justify-center flex-col backdrop-blur-[2px]">
-                <div className="w-12 h-12 rounded-full bg-emerald-500/30 flex items-center justify-center shadow-lg border border-emerald-500/50 mb-2">
-                  <CheckCircle2 className="w-6 h-6 text-emerald-300" />
+            <>
+              <img src={imagePreview} alt="Preview" className="w-full h-36 object-cover opacity-50" />
+              <div className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-sm">
+                <div className="flex items-center gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-accent" />
+                  <p className="font-mono text-sm text-foreground">{imageFile?.name}</p>
                 </div>
-                <p className="text-sm font-medium text-white shadow-sm drop-shadow-md">{imageFile?.name}</p>
               </div>
-            </div>
+            </>
           ) : (
-            <div className="flex flex-col items-center text-center space-y-2">
-              <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center mb-2">
-                <ImageIcon className="w-6 h-6 text-slate-400" />
+            <div className="flex items-center gap-4 p-6">
+              <div className="w-10 h-10 border border-border flex items-center justify-center group-hover:border-accent/40 transition-colors">
+                <ImageIcon className="w-5 h-5 text-muted-foreground" />
               </div>
-              <p className="text-sm font-medium text-slate-300">Upload breadboard photo</p>
-              <p className="text-xs text-slate-500">JPEG, JPG, or PNG</p>
+              <div>
+                <p className="font-mono text-sm text-foreground">Drop breadboard photo here</p>
+                <p className="font-mono text-[10px] text-muted-foreground mt-0.5">JPEG or PNG</p>
+              </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Input Section C: Specific Parts (New) */}
-      <div className="border border-slate-800 bg-slate-900/50 rounded-xl p-5 flex flex-col gap-4">
-        <div className="flex items-center space-x-2">
-          <Package className="w-5 h-5 text-indigo-400" />
-          <h3 className="text-sm font-semibold text-slate-200">Specific Component Manifest (BOM)</h3>
-        </div>
-        
-        <form onSubmit={handleAddPart} className="flex gap-2">
-          <input
-            type="text"
-            value={newPart}
-            onChange={(e) => setNewPart(e.target.value)}
-            placeholder="Add part e.g., 555 Timer, L7805, 10uF Capacitor"
-            className="flex-1 bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-200 outline-none transition-colors"
-          />
-          <button
-            type="submit"
-            className="bg-indigo-600 hover:bg-indigo-500 border border-indigo-500 text-white rounded-lg p-2 transition-colors flex items-center justify-center"
-          >
-            <Plus className="w-5 h-5" />
-          </button>
-        </form>
-
-        <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto pr-1">
-          {parts.length === 0 ? (
-            <span className="text-xs text-slate-500 italic">No parts added yet. Add specific ICs or modules to enhance AI matching.</span>
-          ) : (
-            parts.map((part, index) => (
-              <span
-                key={index}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-indigo-500/10 border border-indigo-500/30 text-indigo-300"
-              >
-                {part}
-                <button
-                  type="button"
-                  onClick={() => handleRemovePart(index)}
-                  className="text-indigo-400 hover:text-indigo-200 focus:outline-none"
+      {/* Parts Manifest */}
+      <div>
+        <span className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-3 block">
+          C / Component Manifest (BOM)
+        </span>
+        <div className="border border-border bg-card p-5 flex flex-col gap-4">
+          <div className="flex items-center gap-2">
+            <Package className="w-4 h-4 text-accent" />
+            <span className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+              Specify parts to boost AI accuracy
+            </span>
+          </div>
+          <form onSubmit={handleAddPart} className="flex gap-2">
+            <input
+              type="text"
+              value={newPart}
+              onChange={(e) => setNewPart(e.target.value)}
+              placeholder="e.g. 555 Timer, L7805, 10uF Cap..."
+              className="flex-1 bg-background border border-border focus:border-accent px-3 py-2 font-mono text-sm text-foreground outline-none transition-colors"
+            />
+            <button
+              type="submit"
+              className="bg-accent text-accent-foreground px-3 py-2 transition-opacity hover:opacity-80"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          </form>
+          <div className="flex flex-wrap gap-2 min-h-[28px]">
+            {parts.length === 0 ? (
+              <span className="font-mono text-xs text-muted-foreground/60 italic">No parts listed yet</span>
+            ) : (
+              parts.map((part, i) => (
+                <span
+                  key={i}
+                  className="inline-flex items-center gap-1.5 px-2 py-1 border border-accent/30 bg-accent/5 font-mono text-[10px] text-accent uppercase tracking-widest"
                 >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </span>
-            ))
-          )}
+                  {part}
+                  <button onClick={() => setParts(prev => prev.filter((_, idx) => idx !== i))} className="hover:text-foreground transition-colors">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ))
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="mt-2">
-        <button
-          onClick={onRun}
-          disabled={!iocFile || !imageFile || isProcessing}
-          className={`w-full py-4 rounded-xl flex items-center justify-center space-x-3 text-lg font-medium transition-all shadow-lg ${
-            !iocFile || !imageFile
-              ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700/50'
-              : isProcessing
-              ? 'bg-indigo-600/80 text-white cursor-wait border border-indigo-500/50'
-              : 'bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-500 hover:shadow-indigo-500/25 hover:scale-[1.01]'
-          }`}
-        >
-          {isProcessing ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              <span>{statusText || 'Processing...'}</span>
-            </>
-          ) : (
-            <>
-              <UploadCloud className="w-5 h-5" />
-              <span>Run AI Reconciliation</span>
-            </>
-          )}
-        </button>
-      </div>
+      {/* Run Button */}
+      <button
+        onClick={onRun}
+        disabled={!canRun}
+        className={`w-full py-4 flex items-center justify-center gap-3 border font-mono text-sm uppercase tracking-[0.2em] transition-all duration-300 ${
+          !iocFile || !imageFile
+            ? "border-border/30 text-muted-foreground/30 cursor-not-allowed bg-card"
+            : isProcessing
+            ? "border-accent/50 text-accent bg-accent/5 cursor-wait"
+            : "border-accent text-accent-foreground bg-accent hover:opacity-90"
+        }`}
+      >
+        {isProcessing ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span>{statusText || "Processing..."}</span>
+          </>
+        ) : (
+          <>
+            <UploadCloud className="w-4 h-4" />
+            <ScrambleTextOnHover text="Run AI Reconciliation" duration={0.5} />
+          </>
+        )}
+      </button>
     </div>
-  );
+  )
 }
