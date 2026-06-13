@@ -131,5 +131,4 @@ async def reconcile_hardware(
     }
     
 app.include_router(ioc_parser_router, prefix="/preprocess_ioc")
-app.include_router(ioc_parser_router, prefix="/preprocess")
 app.include_router(oauth3_router, prefix="/test")
