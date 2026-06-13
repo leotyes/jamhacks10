@@ -15,7 +15,7 @@ const TABS = [
 
 type TabId = typeof TABS[number]["id"]
 
-export function OutputTabs({ netlist }: OutputTabsProps) {
+export function OutputTabs({ netlist, schematicUrl }: OutputTabsProps) {
   const [activeTab, setActiveTab] = useState<TabId>("netlist")
 
   return (
@@ -71,13 +71,23 @@ export function OutputTabs({ netlist }: OutputTabsProps) {
               </svg>
               {/* Hover download overlay */}
               <div className="absolute inset-0 bg-background/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 backdrop-blur-sm">
-                <button className="border border-accent text-accent font-mono text-[10px] uppercase tracking-widest px-6 py-3 hover:bg-accent hover:text-accent-foreground transition-colors">
-                  <ScrambleTextOnHover text="Download .kicad_sch" />
-                </button>
+                {schematicUrl ? (
+                  <a
+                    href={schematicUrl}
+                    download="circuit.net"
+                    className="border border-accent text-accent font-mono text-[10px] uppercase tracking-widest px-6 py-3 hover:bg-accent hover:text-accent-foreground transition-colors text-center"
+                  >
+                    <ScrambleTextOnHover text="Download .net File" />
+                  </a>
+                ) : (
+                  <button className="border border-border text-muted-foreground font-mono text-[10px] uppercase tracking-widest px-6 py-3 cursor-not-allowed">
+                    No Netlist Generated
+                  </button>
+                )}
               </div>
             </div>
             <p className="font-mono text-xs text-muted-foreground text-center uppercase tracking-widest max-w-sm">
-              Generated KiCad schematic. Hover to download source file.
+              Generated KiCad Netlist. Hover to download source file.
             </p>
           </div>
         )}

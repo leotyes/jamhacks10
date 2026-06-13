@@ -1,10 +1,180 @@
 {
-  "components": ["Battery", "Resistor", "LED", "NPN"],
-  "connections": [
-    {"from": "Battery.positive",  "to": "Resistor.pin1"},
-    {"from": "Resistor.pin2",     "to": "LED.anode"},
-    {"from": "LED.cathode",       "to": "NPN.collector"},
-    {"from": "NPN.emitter",       "to": "Battery.negative"},
-    {"from": "NPN.base",          "to": "Resistor.pin2"}
+  "components": [
+    {
+      "id": "NUCLEO",
+      "type": "MCU_BOARD",
+      "hardware_model": "NUCLEO-H7A3ZI-Q",
+      "pins": {
+        "3V3": "VCC_3V3",
+        "GND": "GND",
+        "PE9": "DFSDM1_CKOUT",
+        "PC3": "DFSDM1_DATIN1_PC3",
+        "PE10": "DFSDM1_DATIN4",
+        "PE12": "DFSDM1_DATIN5",
+        "PE4": "DFSDM1_DATIN3",
+        "PC5": "DFSDM1_DATIN2",
+        "PC1": "DFSDM1_DATIN0"
+      }
+    },
+    {
+      "id": "HEX_N",
+      "type": "MICROPHONE",
+      "hardware_model": "Adafruit 4346 PDM Microphone",
+      "pins": {
+        "VDD": "VCC_3V3",
+        "GND": "GND",
+        "CLK": "DFSDM1_CKOUT",
+        "DAT": "DFSDM1_DATIN1_PC3"
+      }
+    },
+    {
+      "id": "HEX_NE",
+      "type": "MICROPHONE",
+      "hardware_model": "Adafruit 4346 PDM Microphone",
+      "pins": {
+        "VDD": "VCC_3V3",
+        "GND": "GND",
+        "CLK": "DFSDM1_CKOUT",
+        "DAT": "DFSDM1_DATIN4"
+      }
+    },
+    {
+      "id": "HEX_SE",
+      "type": "MICROPHONE",
+      "hardware_model": "Adafruit 4346 PDM Microphone",
+      "pins": {
+        "VDD": "VCC_3V3",
+        "GND": "GND",
+        "CLK": "DFSDM1_CKOUT",
+        "DAT": "DFSDM1_DATIN5"
+      }
+    },
+    {
+      "id": "HEX_S",
+      "type": "MICROPHONE",
+      "hardware_model": "Adafruit 4346 PDM Microphone",
+      "pins": {
+        "VDD": "VCC_3V3",
+        "GND": "GND",
+        "CLK": "DFSDM1_CKOUT",
+        "DAT": "DFSDM1_DATIN3"
+      }
+    },
+    {
+      "id": "HEX_SW",
+      "type": "MICROPHONE",
+      "hardware_model": "Adafruit 4346 PDM Microphone",
+      "pins": {
+        "VDD": "VCC_3V3",
+        "GND": "GND",
+        "CLK": "DFSDM1_CKOUT",
+        "DAT": "DFSDM1_DATIN2"
+      }
+    },
+    {
+      "id": "HEX_NW",
+      "type": "MICROPHONE",
+      "hardware_model": "Adafruit 4346 PDM Microphone",
+      "pins": {
+        "VDD": "VCC_3V3",
+        "GND": "GND",
+        "CLK": "DFSDM1_CKOUT",
+        "DAT": "DFSDM1_DATIN0"
+      }
+    }
+  ],
+  "nets": [
+    {
+      "name": "VCC_3V3",
+      "description": "Shared 3.3V supply, bussed through perfboard to all mics",
+      "connections": [
+        "HEX_N.VDD",
+        "HEX_NE.VDD",
+        "HEX_NW.VDD",
+        "HEX_S.VDD",
+        "HEX_SE.VDD",
+        "HEX_SW.VDD",
+        "NUCLEO.3V3"
+      ]
+    },
+    {
+      "name": "GND",
+      "description": "Shared ground, bussed through perfboard to all mics",
+      "connections": [
+        "HEX_N.GND",
+        "HEX_NE.GND",
+        "HEX_NW.GND",
+        "HEX_S.GND",
+        "HEX_SE.GND",
+        "HEX_SW.GND",
+        "NUCLEO.GND"
+      ]
+    },
+    {
+      "name": "DFSDM1_CKOUT",
+      "description": "IOC: DFSDM1_CKOUT on PE9, bussed through perfboard to all mic CLK pins",
+      "connections": [
+        "HEX_N.CLK",
+        "HEX_NE.CLK",
+        "HEX_NW.CLK",
+        "HEX_S.CLK",
+        "HEX_SE.CLK",
+        "HEX_SW.CLK",
+        "NUCLEO.PE9"
+      ]
+    },
+    {
+      "name": "DFSDM1_DATIN1_PC3",
+      "description": "IOC: DFSDM1_DATIN1 configured on PC3_C, but CV shows wired to PC3",
+      "connections": [
+        "HEX_N.DAT",
+        "NUCLEO.PC3"
+      ]
+    },
+    {
+      "name": "DFSDM1_DATIN4",
+      "description": "IOC: DFSDM1_DATIN4 on PE10",
+      "connections": [
+        "HEX_NE.DAT",
+        "NUCLEO.PE10"
+      ]
+    },
+    {
+      "name": "DFSDM1_DATIN5",
+      "description": "IOC: DFSDM1_DATIN5 on PE12",
+      "connections": [
+        "HEX_SE.DAT",
+        "NUCLEO.PE12"
+      ]
+    },
+    {
+      "name": "DFSDM1_DATIN3",
+      "description": "IOC: DFSDM1_DATIN3 on PE4",
+      "connections": [
+        "HEX_S.DAT",
+        "NUCLEO.PE4"
+      ]
+    },
+    {
+      "name": "DFSDM1_DATIN2",
+      "description": "IOC: DFSDM1_DATIN2 on PC5",
+      "connections": [
+        "HEX_SW.DAT",
+        "NUCLEO.PC5"
+      ]
+    },
+    {
+      "name": "DFSDM1_DATIN0",
+      "description": "IOC: DFSDM1_DATIN0 on PC1",
+      "connections": [
+        "HEX_NW.DAT",
+        "NUCLEO.PC1"
+      ]
+    }
+  ],
+  "notes": [
+    "IOC pin_map lists DFSDM1_DATIN1 on PC3_C, but CV shows HEX_N's DAT wired to PC3 (different pin) -- net DFSDM1_DATIN1_PC3 reflects CV wiring.",
+    "CV connection W27 reports 'CLK' signal type from CENTRAL_PERFBOARD to NUCLEO.PC_3, but the circuit's functional intent (and IOC config of PE9 as DFSDM1_CKOUT) suggests PE9 is the clock source for mics. This netlist assumes PE9 as the CLK source and PC3 as a DATIN, as per example output.",
+    "CV connection W28 reports 'DAT' signal type from CENTRAL_PERFBOARD to NUCLEO.PE_9, but the circuit's functional intent (and IOC config of PE9 as DFSDM1_CKOUT) suggests PE9 is the clock source, not a data input. This netlist assigns PE9 to DFSDM1_CKOUT, as per example output."
   ]
 }

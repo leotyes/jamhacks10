@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from ai_vision.cv_layer import analyze_breadboard_from_bytes
-from schematic_generator import generate_schematic
+from schematic_generator import simplify_to_production, generate_netlist
 try:
     from services.ioc_parser import router as ioc_parser_router, parse_ioc_content
     from services.oauth3legtest import router as oauth3_router, get_access_token, product_search, enrich_product
@@ -298,223 +298,248 @@ async def reconcile_hardware(
         digikey_result=json.dumps(parts_search_results, indent=2),
     )
     
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt
-    )
+    # response = client.models.generate_content(
+    #     model="gemini-2.5-flash",
+    #     contents=prompt
+    # )
 
-    # Clean up code fences and load as a dictionary
+    # # Clean up code fences and load as a dictionary
+    # try:
+    #     resp_text = response.text.strip()
+    #     if "```" in resp_text:
+    #         resp_text = resp_text.split("```")[1].replace("json", "", 1).strip()
+    #     netlist_dict = json.loads(resp_text)
+    # except Exception as e:
+    #     print(f"[fusion] Failed to parse JSON: {e}")
+    #     # Fallback to avoid crashing the response validation schema
+    #     netlist_dict = {"error": f"Parsing failed: {str(e)}", "raw_response": response.text}
+    netlist_dict = {
+  "components": [
+    {
+      "id": "NUCLEO",
+      "type": "MCU_BOARD",
+      "hardware_model": "NUCLEO-H7A3ZI-Q",
+      "pins": {
+        "3V3": "VCC_3V3",
+        "GND": "GND",
+        "PE9": "DFSDM1_CKOUT",
+        "PC3": "DFSDM1_DATIN1_PC3",
+        "PE10": "DFSDM1_DATIN4",
+        "PE12": "DFSDM1_DATIN5",
+        "PE4": "DFSDM1_DATIN3",
+        "PC5": "DFSDM1_DATIN2",
+        "PC1": "DFSDM1_DATIN0"
+      }
+    },
+    {
+      "id": "HEX_N",
+      "type": "MICROPHONE",
+      "hardware_model": "Adafruit 4346 PDM Microphone",
+      "pins": {
+        "VDD": "VCC_3V3",
+        "GND": "GND",
+        "CLK": "DFSDM1_CKOUT",
+        "DAT": "DFSDM1_DATIN1_PC3"
+      }
+    },
+    {
+      "id": "HEX_NE",
+      "type": "MICROPHONE",
+      "hardware_model": "Adafruit 4346 PDM Microphone",
+      "pins": {
+        "VDD": "VCC_3V3",
+        "GND": "GND",
+        "CLK": "DFSDM1_CKOUT",
+        "DAT": "DFSDM1_DATIN4"
+      }
+    },
+    {
+      "id": "HEX_SE",
+      "type": "MICROPHONE",
+      "hardware_model": "Adafruit 4346 PDM Microphone",
+      "pins": {
+        "VDD": "VCC_3V3",
+        "GND": "GND",
+        "CLK": "DFSDM1_CKOUT",
+        "DAT": "DFSDM1_DATIN5"
+      }
+    },
+    {
+      "id": "HEX_S",
+      "type": "MICROPHONE",
+      "hardware_model": "Adafruit 4346 PDM Microphone",
+      "pins": {
+        "VDD": "VCC_3V3",
+        "GND": "GND",
+        "CLK": "DFSDM1_CKOUT",
+        "DAT": "DFSDM1_DATIN3"
+      }
+    },
+    {
+      "id": "HEX_SW",
+      "type": "MICROPHONE",
+      "hardware_model": "Adafruit 4346 PDM Microphone",
+      "pins": {
+        "VDD": "VCC_3V3",
+        "GND": "GND",
+        "CLK": "DFSDM1_CKOUT",
+        "DAT": "DFSDM1_DATIN2"
+      }
+    },
+    {
+      "id": "HEX_NW",
+      "type": "MICROPHONE",
+      "hardware_model": "Adafruit 4346 PDM Microphone",
+      "pins": {
+        "VDD": "VCC_3V3",
+        "GND": "GND",
+        "CLK": "DFSDM1_CKOUT",
+        "DAT": "DFSDM1_DATIN0"
+      }
+    }
+  ],
+  "nets": [
+    {
+      "name": "VCC_3V3",
+      "description": "Shared 3.3V supply, bussed through perfboard to all mics",
+      "connections": [
+        "HEX_N.VDD",
+        "HEX_NE.VDD",
+        "HEX_NW.VDD",
+        "HEX_S.VDD",
+        "HEX_SE.VDD",
+        "HEX_SW.VDD",
+        "NUCLEO.3V3"
+      ]
+    },
+    {
+      "name": "GND",
+      "description": "Shared ground, bussed through perfboard to all mics",
+      "connections": [
+        "HEX_N.GND",
+        "HEX_NE.GND",
+        "HEX_NW.GND",
+        "HEX_S.GND",
+        "HEX_SE.GND",
+        "HEX_SW.GND",
+        "NUCLEO.GND"
+      ]
+    },
+    {
+      "name": "DFSDM1_CKOUT",
+      "description": "IOC: DFSDM1_CKOUT on PE9, bussed through perfboard to all mic CLK pins",
+      "connections": [
+        "HEX_N.CLK",
+        "HEX_NE.CLK",
+        "HEX_NW.CLK",
+        "HEX_S.CLK",
+        "HEX_SE.CLK",
+        "HEX_SW.CLK",
+        "NUCLEO.PE9"
+      ]
+    },
+    {
+      "name": "DFSDM1_DATIN1_PC3",
+      "description": "IOC: DFSDM1_DATIN1 configured on PC3_C, but CV shows wired to PC3",
+      "connections": [
+        "HEX_N.DAT",
+        "NUCLEO.PC3"
+      ]
+    },
+    {
+      "name": "DFSDM1_DATIN4",
+      "description": "IOC: DFSDM1_DATIN4 on PE10",
+      "connections": [
+        "HEX_NE.DAT",
+        "NUCLEO.PE10"
+      ]
+    },
+    {
+      "name": "DFSDM1_DATIN5",
+      "description": "IOC: DFSDM1_DATIN5 on PE12",
+      "connections": [
+        "HEX_SE.DAT",
+        "NUCLEO.PE12"
+      ]
+    },
+    {
+      "name": "DFSDM1_DATIN3",
+      "description": "IOC: DFSDM1_DATIN3 on PE4",
+      "connections": [
+        "HEX_S.DAT",
+        "NUCLEO.PE4"
+      ]
+    },
+    {
+      "name": "DFSDM1_DATIN2",
+      "description": "IOC: DFSDM1_DATIN2 on PC5",
+      "connections": [
+        "HEX_SW.DAT",
+        "NUCLEO.PC5"
+      ]
+    },
+    {
+      "name": "DFSDM1_DATIN0",
+      "description": "IOC: DFSDM1_DATIN0 on PC1",
+      "connections": [
+        "HEX_NW.DAT",
+        "NUCLEO.PC1"
+      ]
+    }
+  ],
+  "notes": [
+    "IOC pin_map lists DFSDM1_DATIN1 on PC3_C, but CV shows HEX_N's DAT wired to PC3 (different pin) -- net DFSDM1_DATIN1_PC3 reflects CV wiring.",
+    "CV connection W27 reports 'CLK' signal type from CENTRAL_PERFBOARD to NUCLEO.PC_3, but the circuit's functional intent (and IOC config of PE9 as DFSDM1_CKOUT) suggests PE9 is the clock source for mics. This netlist assumes PE9 as the CLK source and PC3 as a DATIN, as per example output.",
+    "CV connection W28 reports 'DAT' signal type from CENTRAL_PERFBOARD to NUCLEO.PE_9, but the circuit's functional intent (and IOC config of PE9 as DFSDM1_CKOUT) suggests PE9 is the clock source, not a data input. This netlist assigns PE9 to DFSDM1_CKOUT, as per example output."
+  ]
+}
+
+    # Simplify to production-ready netlist and generate .net file
+    download_url = ""
     try:
-        resp_text = response.text.strip()
-        if "```" in resp_text:
-            resp_text = resp_text.split("```")[1].replace("json", "", 1).strip()
-        netlist_dict = json.loads(resp_text)
+        production_netlist = simplify_to_production(netlist_dict)
+        filename = f"circuit_{uuid.uuid4().hex[:8]}.net"
+        output_path = os.path.join(SCHEMATICS_DIR, filename)
+        generate_netlist(production_netlist, output_file=output_path)
+        download_url = f"http://127.0.0.1:8000/api/download-netlist/{filename}"
     except Exception as e:
-        print(f"[fusion] Failed to parse JSON: {e}")
-        # Fallback to avoid crashing the response validation schema
-        netlist_dict = {"error": f"Parsing failed: {str(e)}", "raw_response": response.text}
+        print(f"[schematic_generator] Failed to simplify/generate netlist: {e}")
 
     return {
         "confidence": 1.0,
         "reasoning_log": json.dumps(ioc_result, indent=2) if isinstance(ioc_result, dict) else ioc_result,
-        "netlist": {
-        "components": [
-            {
-            "id": "NUCLEO",
-            "type": "MCU_BOARD",
-            "hardware_model": "NUCLEO-H7A3ZI-Q",
-            "pins": {
-                "3V3": "VCC_3V3",
-                "GND": "GND",
-                "PE9": "DFSDM1_CKOUT",
-                "PC3": "DFSDM1_DATIN1_PC3",
-                "PE10": "DFSDM1_DATIN4",
-                "PE12": "DFSDM1_DATIN5",
-                "PE4": "DFSDM1_DATIN3",
-                "PC5": "DFSDM1_DATIN2",
-                "PC1": "DFSDM1_DATIN0"
-            }
-            },
-            {
-            "id": "HEX_N",
-            "type": "MICROPHONE",
-            "hardware_model": "Adafruit 4346 PDM Microphone",
-            "pins": {
-                "VDD": "VCC_3V3",
-                "GND": "GND",
-                "CLK": "DFSDM1_CKOUT",
-                "DAT": "DFSDM1_DATIN1_PC3"
-            }
-            },
-            {
-            "id": "HEX_NE",
-            "type": "MICROPHONE",
-            "hardware_model": "Adafruit 4346 PDM Microphone",
-            "pins": {
-                "VDD": "VCC_3V3",
-                "GND": "GND",
-                "CLK": "DFSDM1_CKOUT",
-                "DAT": "DFSDM1_DATIN4"
-            }
-            },
-            {
-            "id": "HEX_SE",
-            "type": "MICROPHONE",
-            "hardware_model": "Adafruit 4346 PDM Microphone",
-            "pins": {
-                "VDD": "VCC_3V3",
-                "GND": "GND",
-                "CLK": "DFSDM1_CKOUT",
-                "DAT": "DFSDM1_DATIN5"
-            }
-            },
-            {
-            "id": "HEX_S",
-            "type": "MICROPHONE",
-            "hardware_model": "Adafruit 4346 PDM Microphone",
-            "pins": {
-                "VDD": "VCC_3V3",
-                "GND": "GND",
-                "CLK": "DFSDM1_CKOUT",
-                "DAT": "DFSDM1_DATIN3"
-            }
-            },
-            {
-            "id": "HEX_SW",
-            "type": "MICROPHONE",
-            "hardware_model": "Adafruit 4346 PDM Microphone",
-            "pins": {
-                "VDD": "VCC_3V3",
-                "GND": "GND",
-                "CLK": "DFSDM1_CKOUT",
-                "DAT": "DFSDM1_DATIN2"
-            }
-            },
-            {
-            "id": "HEX_NW",
-            "type": "MICROPHONE",
-            "hardware_model": "Adafruit 4346 PDM Microphone",
-            "pins": {
-                "VDD": "VCC_3V3",
-                "GND": "GND",
-                "CLK": "DFSDM1_CKOUT",
-                "DAT": "DFSDM1_DATIN0"
-            }
-            }
-        ],
-        "nets": [
-            {
-            "name": "VCC_3V3",
-            "description": "Shared 3.3V supply, bussed through perfboard to all mics",
-            "connections": [
-                "HEX_N.VDD",
-                "HEX_NE.VDD",
-                "HEX_NW.VDD",
-                "HEX_S.VDD",
-                "HEX_SE.VDD",
-                "HEX_SW.VDD",
-                "NUCLEO.3V3"
-            ]
-            },
-            {
-            "name": "GND",
-            "description": "Shared ground, bussed through perfboard to all mics",
-            "connections": [
-                "HEX_N.GND",
-                "HEX_NE.GND",
-                "HEX_NW.GND",
-                "HEX_S.GND",
-                "HEX_SE.GND",
-                "HEX_SW.GND",
-                "NUCLEO.GND"
-            ]
-            },
-            {
-            "name": "DFSDM1_CKOUT",
-            "description": "IOC: DFSDM1_CKOUT on PE9, bussed through perfboard to all mic CLK pins",
-            "connections": [
-                "HEX_N.CLK",
-                "HEX_NE.CLK",
-                "HEX_NW.CLK",
-                "HEX_S.CLK",
-                "HEX_SE.CLK",
-                "HEX_SW.CLK",
-                "NUCLEO.PE9"
-            ]
-            },
-            {
-            "name": "DFSDM1_DATIN1_PC3",
-            "description": "IOC: DFSDM1_DATIN1 configured on PC3_C, but CV shows wired to PC3",
-            "connections": [
-                "HEX_N.DAT",
-                "NUCLEO.PC3"
-            ]
-            },
-            {
-            "name": "DFSDM1_DATIN4",
-            "description": "IOC: DFSDM1_DATIN4 on PE10",
-            "connections": [
-                "HEX_NE.DAT",
-                "NUCLEO.PE10"
-            ]
-            },
-            {
-            "name": "DFSDM1_DATIN5",
-            "description": "IOC: DFSDM1_DATIN5 on PE12",
-            "connections": [
-                "HEX_SE.DAT",
-                "NUCLEO.PE12"
-            ]
-            },
-            {
-            "name": "DFSDM1_DATIN3",
-            "description": "IOC: DFSDM1_DATIN3 on PE4",
-            "connections": [
-                "HEX_S.DAT",
-                "NUCLEO.PE4"
-            ]
-            },
-            {
-            "name": "DFSDM1_DATIN2",
-            "description": "IOC: DFSDM1_DATIN2 on PC5",
-            "connections": [
-                "HEX_SW.DAT",
-                "NUCLEO.PC5"
-            ]
-            },
-            {
-            "name": "DFSDM1_DATIN0",
-            "description": "IOC: DFSDM1_DATIN0 on PC1",
-            "connections": [
-                "HEX_NW.DAT",
-                "NUCLEO.PC1"
-            ]
-            }
-        ],
-        "notes": [
-            "IOC pin_map lists DFSDM1_DATIN1 on PC3_C, but CV shows HEX_N's DAT wired to PC3 (different pin) -- net DFSDM1_DATIN1_PC3 reflects CV wiring.",
-            "CV connection W27 reports 'CLK' signal type from CENTRAL_PERFBOARD to NUCLEO.PC_3, but the circuit's functional intent (and IOC config of PE9 as DFSDM1_CKOUT) suggests PE9 is the clock source for mics. This netlist assumes PE9 as the CLK source and PC3 as a DATIN, as per example output.",
-            "CV connection W28 reports 'DAT' signal type from CENTRAL_PERFBOARD to NUCLEO.PE_9, but the circuit's functional intent (and IOC config of PE9 as DFSDM1_CKOUT) suggests PE9 is the clock source, not a data input. This netlist assigns PE9 to DFSDM1_CKOUT, as per example output."
-        ]},
-        "schematic_url": ""
+        "netlist": netlist_dict,
+        "schematic_url": download_url
     }
 
 
 @app.post("/generate-schematic")
 async def generate_schematic_endpoint(request: NetlistRequest):
-    output_path = os.path.join(SCHEMATICS_DIR, f"circuit_{uuid.uuid4().hex[:8]}.kicad_sch")
+    output_path = os.path.join(SCHEMATICS_DIR, f"circuit_{uuid.uuid4().hex[:8]}.net")
     try:
-        generate_schematic(request.netlist, output_file=output_path)
+        generate_netlist(request.netlist, output_file=output_path)
         return FileResponse(
             output_path,
             media_type="application/octet-stream",
-            filename="circuit.kicad_sch"
+            filename="circuit.net"
         )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
+
+
+@app.get("/api/download-netlist/{filename}")
+def download_netlist(filename: str):
+    file_path = os.path.join(SCHEMATICS_DIR, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(
+        file_path,
+        media_type="application/octet-stream",
+        filename="circuit.net"
+    )
 
 
 if _ioc_parser_available:

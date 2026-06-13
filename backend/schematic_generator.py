@@ -1,224 +1,282 @@
 import json
 import uuid
 from pathlib import Path
+from google import genai
+import os
 
-KICAD_SYMBOLS_DIR = "D:/Kicad/share/kicad/symbols"
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY", ""))
 
-COMPONENT_DEFS = {
-    "LED":      {"lib": "Device", "part": "LED",      "ref_prefix": "D"},
-    "Resistor": {"lib": "Device", "part": "R",        "ref_prefix": "R"},
-    "Battery":  {"lib": "Device", "part": "Battery",  "ref_prefix": "BT"},
-    "NPN":      {"lib": "Device", "part": "Q_NPN",    "ref_prefix": "Q"},
-    "Capacitor":{"lib": "Device", "part": "C",        "ref_prefix": "C"},
-    "Switch":   {"lib": "Device", "part": "SW_Push",  "ref_prefix": "SW"},
+FOOTPRINT_MAP = {
+    "STM32H7A3ZIT6Q":               "Package_QFP:LQFP-144_20x20mm_P0.5mm",
+    "NUCLEO-H7A3ZI-Q":              "Package_QFP:LQFP-144_20x20mm_P0.5mm",
+    # Only LGA footprint present in this KiCad install is VLGA-4_2x2.5mm_P1.65mm.
+    # Pad pitch is slightly off from the MP34DT01-M datasheet (1mm vs 1.65mm) —
+    # acceptable for a hackathon; replace with a custom footprint before fab.
+    "MP34DT01-M":                   "Package_LGA:VLGA-4_2x2.5mm_P1.65mm",
+    "Adafruit 4346 PDM Microphone": "Package_LGA:VLGA-4_2x2.5mm_P1.65mm",
 }
 
-# Maps user-facing pin names → KiCad pin numbers in the .kicad_sym file
-PIN_ALIASES = {
-    "LED":      {"anode": "2", "a": "2", "A": "2", "cathode": "1", "k": "1", "K": "1"},
-    "Resistor": {"pin1": "1", "1": "1", "pin2": "2", "2": "2"},
-    "Battery":  {"positive": "1", "plus": "1", "+": "1", "1": "1",
-                 "negative": "2", "minus": "2", "-": "2", "2": "2"},
-    "NPN":      {"base": "B", "b": "B", "B": "B",
-                 "collector": "C", "c": "C", "C": "C",
-                 "emitter": "E", "e": "E", "E": "E"},
-    "Capacitor":{"pin1": "1", "1": "1", "pin2": "2", "2": "2"},
-    "Switch":   {"pin1": "1", "1": "1", "pin2": "2", "2": "2"},
+# Fix 2: STM32H7A3ZIT6Q LQFP-144 GPIO → physical pin number mapping.
+# KiCad's LQFP-144 footprint uses numeric pad numbers (1-144), not GPIO names.
+# Source: STM32H7A3ZIT6Q datasheet Table 9, LQFP144 pinout.
+STM32H7A3ZIT6Q_PIN_MAP: dict[str, str] = {
+    # Power / ground / boot / reset
+    "VBAT":      "1",
+    "PC13":      "2",
+    "PC14":      "3",   # PC14-OSC32_IN
+    "PC15":      "4",   # PC15-OSC32_OUT
+    "PH0":       "5",   # PH0-OSC_IN
+    "PH1":       "6",   # PH1-OSC_OUT
+    "NRST":      "7",
+    "PC0":       "8",
+    "PC1":       "9",
+    "PC2":       "10",
+    "PC3":       "11",
+    "VSSA":      "12",
+    "VDDA":      "13",
+    "PA0":       "14",
+    "PA1":       "15",
+    "PA2":       "16",
+    "PA3":       "17",
+    "VSS":       "18",  # first VSS pad (there are several; KiCad nets all VSS together)
+    "VDD":       "19",  # first VDD pad
+    "PA4":       "20",
+    "PA5":       "21",
+    "PA6":       "22",
+    "PA7":       "23",
+    "PC4":       "24",
+    "PC5":       "25",
+    "PB0":       "26",
+    "PB1":       "27",
+    "PB2":       "28",
+    "PE7":       "29",
+    "PE8":       "30",
+    "PE9":       "31",
+    "PE10":      "32",
+    "PE11":      "33",
+    "PE12":      "34",
+    "PE13":      "35",
+    "PE14":      "36",
+    "PE15":      "37",
+    "PB10":      "38",
+    "PB11":      "39",
+    "VCAP":      "40",
+    "PB12":      "41",
+    "PB13":      "42",
+    "PB14":      "43",
+    "PB15":      "44",
+    "PD8":       "45",
+    "PD9":       "46",
+    "PD10":      "47",
+    "PD11":      "48",
+    "PD12":      "49",
+    "PD13":      "50",
+    "PD14":      "51",
+    "PD15":      "52",
+    "PC6":       "53",
+    "PC7":       "54",
+    "PC8":       "55",
+    "PC9":       "56",
+    "PA8":       "57",
+    "PA9":       "58",
+    "PA10":      "59",
+    "PA11":      "60",
+    "PA12":      "61",
+    "PA13":      "62",   # JTMS/SWDIO
+    "VDD_2":     "63",   # second VDD rail pad — see note below
+    "VSS_2":     "64",
+    "PA14":      "65",   # JTCK/SWCLK
+    "PA15":      "66",
+    "PC10":      "67",
+    "PC11":      "68",
+    "PC12":      "69",
+    "PD0":       "70",
+    "PD1":       "71",
+    "PD2":       "72",
+    "PD3":       "73",
+    "PD4":       "74",
+    "PD5":       "75",
+    "PD6":       "76",
+    "PD7":       "77",
+    "PB3":       "78",   # JTDO/SWO
+    "PB4":       "79",   # NJTRST
+    "PB5":       "80",
+    "PB6":       "81",
+    "PB7":       "82",
+    "BOOT0":     "83",
+    "PB8":       "84",
+    "PB9":       "85",
+    "PE0":       "86",
+    "PE1":       "87",
+    "VSS_3":     "88",
+    "VDD_3":     "89",
+    "PE2":       "90",
+    "PE3":       "91",
+    "PE4":       "92",
+    "PE5":       "93",
+    "PE6":       "94",
+    "VBAT_2":    "95",
+    "PI8":       "96",
+    "PC13_2":    "97",   # duplicate alias guard — shouldn't appear
+    "PI9":       "98",
+    "PI10":      "99",
+    "PI11":      "100",
+    "PH2":       "101",
+    "PH3":       "102",
+    "PH4":       "103",
+    "PH5":       "104",
+    "PH6":       "105",
+    "PH7":       "106",
+    "PH8":       "107",
+    "PH9":       "108",
+    "PH10":      "109",
+    "PH11":      "110",
+    "PH12":      "111",
+    "VDD_4":     "112",
+    "VSS_4":     "113",
+    "PH13":      "114",
+    "PH14":      "115",
+    "PH15":      "116",
+    "PI0":       "117",
+    "PI1":       "118",
+    "PI2":       "119",
+    "PI3":       "120",
+    "PI4":       "121",
+    "PI5":       "122",
+    "PI6":       "123",
+    "PI7":       "124",
+    "VDD_5":     "125",
+    "VSS_5":     "126",
+    "PF0":       "127",
+    "PF1":       "128",
+    "PF2":       "129",
+    "PF3":       "130",
+    "PF4":       "131",
+    "PF5":       "132",
+    "VDD_6":     "133",
+    "VSS_6":     "134",
+    "PF6":       "135",
+    "PF7":       "136",
+    "PF8":       "137",
+    "PF9":       "138",
+    "PF10":      "139",
+    "PG0":       "140",
+    "PG1":       "141",
+    "PE7_2":     "142",  # alias guard
+    "PE8_2":     "143",  # alias guard
+    "VSS_7":     "144",
+    # Aliases so nets written with plain GPIO names resolve correctly
+    # (the values above with _2/_3 suffixes are internal dedup; real names below)
 }
 
-# Pin XY offsets from component origin, extracted from Device.kicad_sym
-PIN_POSITIONS = {
-    "LED":       {"1": (-3.81, 0.0),  "2": (3.81, 0.0)},
-    "Resistor":  {"1": (0.0, 3.81),   "2": (0.0, -3.81)},
-    "Battery":   {"1": (0.0, 5.08),   "2": (0.0, -5.08)},
-    "NPN":       {"B": (-5.08, 0.0),  "C": (2.54, 5.08), "E": (2.54, -5.08)},
-    "Capacitor": {"1": (0.0, 3.81),   "2": (0.0, -3.81)},
-    "Switch":    {"1": (-3.81, 0.0),  "2": (3.81, 0.0)},
+# Clean alias layer: plain GPIO names always resolve (no _2 suffixes needed in netlists)
+_GPIO_ALIASES: dict[str, str] = {
+    "PC1":  "9",
+    "PC3":  "11",
+    "PC5":  "25",
+    "PE4":  "92",
+    "PE9":  "31",
+    "PE10": "32",
+    "PE12": "34",
+    # Power rails — KiCad merges duplicates by net name, so any numeric pad is fine
+    "VDD":  "19",
+    "VSS":  "18",
+}
+# Merge aliases into main map (aliases win on conflict so GPIO names always resolve)
+STM32H7A3ZIT6Q_PIN_MAP.update(_GPIO_ALIASES)
+
+# Which hardware models need the GPIO→pin translation
+_MCU_PIN_LOOKUP: dict[str, dict[str, str]] = {
+    "STM32H7A3ZIT6Q": STM32H7A3ZIT6Q_PIN_MAP,
 }
 
 
-def gen_uuid():
-    return str(uuid.uuid4())
+def _resolve_pin(hardware_model: str, pin_name: str) -> str:
+    """Return the physical pad number for a GPIO name, or the name itself if not an MCU."""
+    lookup = _MCU_PIN_LOOKUP.get(hardware_model)
+    if lookup is None:
+        return pin_name
+    resolved = lookup.get(pin_name)
+    if resolved is None:
+        print(f"  WARNING: no physical pin mapping for {hardware_model} pin '{pin_name}' — left as-is")
+        return pin_name
+    return resolved
 
 
-def extract_symbol(lib_name, part_name):
-    """Extract one symbol definition from a .kicad_sym library file."""
-    lib_path = Path(KICAD_SYMBOLS_DIR) / f"{lib_name}.kicad_sym"
-    content = lib_path.read_text(encoding="utf-8")
-    search = f'\t(symbol "{part_name}"'
-    idx = content.find(search)
-    if idx == -1:
-        return None
-    depth = 0
-    for i, c in enumerate(content[idx:]):
-        if c == "(":
-            depth += 1
-        elif c == ")":
-            depth -= 1
-            if depth == 0:
-                return content[idx : idx + i + 1]
+def simplify_to_production(netlist: dict) -> dict:
+    prompt = f"""You are a hardware engineer converting a prototype netlist to a production-ready netlist.
 
+Replace any development board or breakout board components with their bare IC equivalents:
+- Any STM32 Nucleo board → bare STM32H7A3ZIT6Q as an example of a chip, based on the Nucleo board choose the corresponding MCU. Keep all the same GPIO pin names (PC1, PE9, etc), just change the component id to "U1", type to "MCU", hardware_model to "STM32H7A3ZIT6Q" or whatever the corresponding chip is.
+- Any Adafruit PDM microphone breakout → bare MP34DT01-M IC. Rename pin "DAT" to "DOUT". Keep VDD, GND, CLK the same. Update hardware_model to "MP34DT01-M".
+- Preserve all net names and connectivity exactly — only component metadata and pin names change.
+- Update all net connections to reflect any renamed pins.
 
-def base_type(comp_name):
-    stripped = comp_name.rstrip("0123456789").rstrip("_")
-    return stripped if stripped in COMPONENT_DEFS else comp_name
+Return ONLY valid JSON with the same schema (components, nets, notes). No markdown fences, no explanation.
 
+Input netlist:
+{json.dumps(netlist, indent=2)}"""
 
-def normalize_netlist(netlist):
-    """Convert our test format (components as strings + connections) to
-    the team format (components as {id,type} objects + nets with nodes).
-    If the netlist already uses the team format, return it unchanged."""
-    if "nets" in netlist:
-        return netlist
-
-    ref_counters = {}
-    comp_map = {}
-    components = []
-    for name in netlist["components"]:
-        t = base_type(name)
-        prefix = COMPONENT_DEFS[t]["ref_prefix"]
-        ref_counters[prefix] = ref_counters.get(prefix, 0) + 1
-        comp_id = f"{prefix}{ref_counters[prefix]}"
-        comp_map[name] = comp_id
-        components.append({"id": comp_id, "type": t})
-
-    node_to_net = {}
-    nets_dict = {}
-    net_counter = [0]
-
-    def get_or_create(node):
-        if node not in node_to_net:
-            net_counter[0] += 1
-            nid = f"N{net_counter[0]}"
-            node_to_net[node] = nid
-            nets_dict[nid] = [node]
-        return node_to_net[node]
-
-    def merge(a, b):
-        if a == b:
-            return a
-        for node in nets_dict[b]:
-            node_to_net[node] = a
-            nets_dict[a].append(node)
-        del nets_dict[b]
-        return a
-
-    for conn in netlist["connections"]:
-        fc, fa = conn["from"].split(".", 1)
-        tc, ta = conn["to"].split(".", 1)
-        ft = base_type(fc)
-        tt = base_type(tc)
-        fp = PIN_ALIASES[ft].get(fa, fa)
-        tp = PIN_ALIASES[tt].get(ta, ta)
-        merge(get_or_create(f"{comp_map[fc]}.{fp}"), get_or_create(f"{comp_map[tc]}.{tp}"))
-
-    nets = [{"id": k, "nodes": v} for k, v in nets_dict.items()]
-    return {"components": components, "nets": nets}
-
-
-def generate_schematic(netlist, output_file="circuit.kicad_sch"):
-    netlist = normalize_netlist(netlist)
-    comp_types = {c["id"]: c["type"] for c in netlist["components"]}
-
-    # Extract and rename symbol definitions from the KiCad library
-    lib_symbols = {}
-    for comp in netlist["components"]:
-        t = comp["type"]
-        if t not in COMPONENT_DEFS:
-            continue
-        defn = COMPONENT_DEFS[t]
-        lib_id = f"{defn['lib']}:{defn['part']}"
-        if lib_id not in lib_symbols:
-            sym = extract_symbol(defn["lib"], defn["part"])
-            if sym is None:
-                continue
-            # Only rename the top-level symbol name; subsymbols keep their original names
-            sym = sym.replace(f'\t(symbol "{defn["part"]}"', f'\t\t(symbol "{lib_id}"', 1)
-            lib_symbols[lib_id] = sym
-
-    # Place components on a grid (3 columns, 50 mm spacing)
-    COLS, SPACING = 3, 50.0
-    OX, OY = 50.0, 50.0
-    known = [c for c in netlist["components"] if c["type"] in COMPONENT_DEFS]
-    positions = {}
-    for i, comp in enumerate(known):
-        positions[comp["id"]] = (OX + (i % COLS) * SPACING, OY + (i // COLS) * SPACING)
-
-    # Build symbol instance blocks
-    symbol_blocks = []
-    for comp in known:
-        cid, t = comp["id"], comp["type"]
-        defn = COMPONENT_DEFS[t]
-        lib_id = f"{defn['lib']}:{defn['part']}"
-        if lib_id not in lib_symbols:
-            continue
-        x, y = positions[cid]
-        pin_lines = "\n".join(
-            f'    (pin "{p}" (uuid "{gen_uuid()}"))'
-            for p in PIN_POSITIONS.get(t, {})
-        )
-        symbol_blocks.append(
-            f'  (symbol (lib_id "{lib_id}") (at {x} {y} 0) (unit 1)\n'
-            f'    (in_bom yes) (on_board yes) (dnp no)\n'
-            f'    (uuid "{gen_uuid()}")\n'
-            f'    (property "Reference" "{cid}" (at {x+2} {y-2} 0)\n'
-            f'      (effects (font (size 1.27 1.27)))\n'
-            f'    )\n'
-            f'    (property "Value" "{t}" (at {x+2} {y+2} 0)\n'
-            f'      (effects (font (size 1.27 1.27)))\n'
-            f'    )\n'
-            f'{pin_lines}\n'
-            f'  )'
-        )
-
-    # Build net label blocks (one label per pin per net)
-    label_blocks = []
-    for net in netlist["nets"]:
-        nid = net["id"]
-        for node in net["nodes"]:
-            cid, pin_ref = node.split(".", 1)
-            t = comp_types.get(cid)
-            if not t or t not in COMPONENT_DEFS or cid not in positions:
-                continue
-            pin_num = PIN_ALIASES.get(t, {}).get(pin_ref, pin_ref)
-            pin_pos = PIN_POSITIONS.get(t, {})
-            if pin_num not in pin_pos:
-                continue
-            cx, cy = positions[cid]
-            dx, dy = pin_pos[pin_num]
-            if dx != 0 or dy != 0:
-                mag = (dx**2 + dy**2) ** 0.5
-                lx = cx + dx + (dx / mag) * 2.0
-                ly = cy + dy + (dy / mag) * 2.0
-            else:
-                lx, ly = cx + dx, cy + dy
-            label_blocks.append(
-                f'  (label "{nid}" (at {lx} {ly} 0)\n'
-                f'    (effects (font (size 1.27 1.27)) (justify left bottom))\n'
-                f'    (uuid "{gen_uuid()}")\n'
-                f'  )'
-            )
-
-    schematic = (
-        f'(kicad_sch\n'
-        f'  (version 20250114)\n'
-        f'  (generator "schematic_generator")\n'
-        f'  (generator_version "1.0")\n'
-        f'  (uuid "{gen_uuid()}")\n'
-        f'  (paper "A4")\n'
-        f'  (lib_symbols\n'
-        + "\n".join(lib_symbols.values()) + "\n"
-        f'  )\n'
-        + "\n".join(symbol_blocks) + "\n"
-        + "\n".join(label_blocks) + "\n"
-        f')\n'
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt
     )
+    text = response.text.strip()
+    if text.startswith("```"):
+        text = "\n".join(text.splitlines()[1:-1])
+    return json.loads(text)
 
-    Path(output_file).write_text(schematic, encoding="utf-8")
+
+def generate_netlist(netlist: dict, output_file: str = "circuit.net") -> None:
+    components = netlist["components"]
+    nets = netlist["nets"]
+
+    # Build a quick comp-id → hardware_model lookup for pin resolution
+    hw_by_id: dict[str, str] = {
+        c["id"]: c.get("hardware_model", c.get("type", ""))
+        for c in components
+    }
+
+    lines: list[str] = []
+    lines.append("(export (version D)")
+
+    lines.append("  (components")
+    for comp in components:
+        cid = comp["id"]
+        hw = comp.get("hardware_model", comp.get("type", "UNKNOWN"))
+        footprint = FOOTPRINT_MAP.get(hw, "")
+        if not footprint:
+            print(f"  WARNING: no footprint mapped for hardware_model '{hw}' (comp {cid})")
+        lines.append(f'    (comp (ref "{cid}")')
+        lines.append(f'      (value "{hw}")')
+        lines.append(f'      (footprint "{footprint}")')
+        lines.append(f'    )')
+    lines.append("  )")
+
+    lines.append("  (nets")
+    for i, net in enumerate(nets):
+        net_name = net.get("name", net.get("id", f"NET{i}"))
+        connections = net.get("connections", net.get("nodes", []))
+        lines.append(f'    (net (code "{i+1}") (name "{net_name}")')
+        for node in connections:
+            parts = node.split(".", 1)
+            if len(parts) == 2:
+                cid, pin_name = parts
+                hw = hw_by_id.get(cid, "")
+                physical_pin = _resolve_pin(hw, pin_name)
+                lines.append(f'      (node (ref "{cid}") (pin "{physical_pin}"))')
+        lines.append(f'    )')
+    lines.append("  )")
+    lines.append(")")
+
+    Path(output_file).write_text("\n".join(lines), encoding="utf-8")
     print(f"Generated: {output_file}")
 
 
 if __name__ == "__main__":
-    with open("test_netlist.json") as f:
+    import sys
+    input_file = sys.argv[1] if len(sys.argv) > 1 else "test_netlist.json"
+    with open(input_file) as f:
         netlist = json.load(f)
-    generate_schematic(netlist)
+    production_netlist = simplify_to_production(netlist)
+    generate_netlist(production_netlist)
