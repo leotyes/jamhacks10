@@ -5,14 +5,14 @@ from typing import List, Optional
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from services.ioc_parser import router as ioc_parser_router
+from services.ioc_parser import router as ioc_parser_router, parse_ioc_content
+from services.component_finder import router as component_finder_router
 
 app = FastAPI(title="Hardware Recon AI Backend")
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# Allow requests from Vite (local dev port)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -21,7 +21,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Define response models
 class ReconciliationResponse(BaseModel):
     confidence: float
     reasoning_log: str
@@ -32,9 +31,8 @@ class ReconciliationResponse(BaseModel):
 async def reconcile_hardware(
     ioc_file: UploadFile = File(...),
     image_file: UploadFile = File(...),
-    parts: Optional[str] = Form(None)  # Received as a serialized JSON string
+    parts: Optional[str] = Form(None)
 ):
-    # 1. Validation checks on incoming files
     if not ioc_file.filename.endswith('.ioc'):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -48,11 +46,9 @@ async def reconcile_hardware(
         )
 
     try:
-        # Read file contents into memory
         ioc_contents = await ioc_file.read()
         image_bytes = await image_file.read()
 
-        # 2. Persist files to disk for processing
         session_id = str(uuid.uuid4())
         session_dir = os.path.join(UPLOAD_DIR, session_id)
         os.makedirs(session_dir, exist_ok=True)
@@ -65,21 +61,18 @@ async def reconcile_hardware(
         with open(saved_image_path, "wb") as f:
             f.write(image_bytes)
 
-        
-        # Parse the custom parts list if sent
         parsed_parts = []
         if parts:
             try:
                 parsed_parts = json.loads(parts)
             except json.JSONDecodeError:
-                pass # Fall back to empty list if decoding fails
+                pass
+                
+        # Call the CubeMX Parser
+        ioc_text = ioc_contents.decode("utf-8", errors="replace")
+        gemini_result = parse_ioc_content(ioc_text)
 
-        # 2. Call the isolated sub-services (Stubs for now)
-        # expected_netlist = parse_ioc_to_netlist(ioc_contents)
-        # physical_netlist = extract_netlist_from_image(image_bytes)
-        # reconciliation_result = reconcile_netlists(expected_netlist, physical_netlist, parsed_parts)
-        
-        # 3. Formulate the unified JSON response structure
+        """
         response_data = {
             "confidence": 0.98 if parsed_parts else 0.94,
             "reasoning_log": (
@@ -103,8 +96,14 @@ async def reconcile_hardware(
             },
             "schematic_url": "/static/schematics/output_schematic.kicad_sch"
         }
+        """
         
-        return response_data
+        return {
+            "confidence": 1.0,
+            "reasoning_log": gemini_result,
+            "netlist": {"components": [], "nets": []},
+            "schematic_url": None
+        }
 
     except Exception as e:
         raise HTTPException(
@@ -112,4 +111,5 @@ async def reconcile_hardware(
             detail=f"Reconciliation engine failure: {str(e)}"
         )
     
-app.include_router(ioc_parser_router, prefix="/preprocess")
+app.include_router(ioc_parser_router, prefix="/preprocess_ioc")
+app.include_router(component_finder_router, prefix="/preprocess_component")

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-// import axios from 'axios';
+import axios from 'axios';
 
 export interface ReconciliationResult {
   confidence: number;
@@ -28,41 +28,18 @@ export function useReconciliation() {
     setTimeout(() => setStatusText('Reconciling graphs...'), 2400);
 
     try {
-      /*
       // EXPLICIT AXIOS CALL FOR FUTURE BACKEND SWAP
       const formData = new FormData();
-      formData.append('ioc', iocFile);
-      formData.append('image', imageFile);
+      formData.append('ioc_file', iocFile);
+      formData.append('image_file', imageFile);
       formData.append('parts', JSON.stringify(parts));
-      const response = await axios.post('/api/reconcile', formData);
-      setResult(response.data);
-      */
-
-      // MOCK BACKEND DELAY & RESPONSE
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      const response = await axios.post('http://127.0.0.1:8000/api/reconcile', formData);
       
-      const componentMatches = parts.length > 0 
-        ? parts.map((part) => `Verified user-specified part: "${part}"`).join('\n')
-        : "No custom component manifest provided. Relying on visual parsing.";
-
-
       setResult({
-        confidence: parts.length > 0 ? 0.98 : 0.94, // Custom parts boost confidence!
-        log: `✅ Analysis Complete\n------------------\n${componentMatches}\n\nDetected 1x Red LED, 1x 220Ω Resistor...\nMatched row 15 to STM32 Pin PA5...\nNo short circuits detected.\nNetlist graphs match with ${parts.length > 0 ? '98%' : '94%'} structural similarity.`,
-        netlist: {
-          "components": [
-            { "id": "U1", "type": "STM32F401" },
-            { "id": "D1", "type": "LED", "color": "Red" },
-            { "id": "R1", "type": "Resistor", "value": "220Ω" },
-            ...parts.map((part, i) => ({ "id": `X${i+1}`, "type": part }))
-          ],
-          "nets": [
-            { "id": "N1", "nodes": ["U1.PA5", "D1.A"] },
-            { "id": "N2", "nodes": ["D1.K", "R1.1"] },
-            { "id": "GND", "nodes": ["R1.2", "U1.GND"] }
-          ]
-        },
-        schematicUrl: "mock_schematic"
+        confidence: response.data.confidence,
+        log: response.data.reasoning_log,
+        netlist: response.data.netlist,
+        schematicUrl: response.data.schematic_url
       });
     } catch (error) {
       console.error(error);
