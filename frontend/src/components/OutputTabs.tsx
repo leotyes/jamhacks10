@@ -5,6 +5,7 @@ import { ScrambleTextOnHover } from "./ScrambleText"
 interface OutputTabsProps {
   netlist: any
   schematicUrl?: string
+  geometryUrl?: string
 }
 
 const TABS = [
@@ -15,7 +16,7 @@ const TABS = [
 
 type TabId = typeof TABS[number]["id"]
 
-export function OutputTabs({ netlist, schematicUrl }: OutputTabsProps) {
+export function OutputTabs({ netlist, schematicUrl, geometryUrl }: OutputTabsProps) {
   const [activeTab, setActiveTab] = useState<TabId>("netlist")
 
   return (
@@ -70,7 +71,7 @@ export function OutputTabs({ netlist, schematicUrl }: OutputTabsProps) {
                 <line x1="10" y1="60" x2="10" y2="100" />
               </svg>
               {/* Hover download overlay */}
-              <div className="absolute inset-0 bg-background/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 backdrop-blur-sm">
+              <div className="absolute inset-0 bg-background/80 flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 backdrop-blur-sm">
                 {schematicUrl ? (
                   <a
                     href={schematicUrl}
@@ -84,10 +85,23 @@ export function OutputTabs({ netlist, schematicUrl }: OutputTabsProps) {
                     No Netlist Generated
                   </button>
                 )}
+                {geometryUrl ? (
+                  <a
+                    href={geometryUrl}
+                    download="circuit.kicad_pcb"
+                    className="border border-accent text-accent font-mono text-[10px] uppercase tracking-widest px-6 py-3 hover:bg-accent hover:text-accent-foreground transition-colors text-center"
+                  >
+                    <ScrambleTextOnHover text="Download .kicad_pcb" />
+                  </a>
+                ) : (
+                  <button className="border border-border text-muted-foreground font-mono text-[10px] uppercase tracking-widest px-6 py-3 cursor-not-allowed">
+                    No PCB Generated
+                  </button>
+                )}
               </div>
             </div>
             <p className="font-mono text-xs text-muted-foreground text-center uppercase tracking-widest max-w-sm">
-              Generated KiCad Netlist. Hover to download source file.
+              Generated KiCad Netlist &amp; PCB. Hover to download source files.
             </p>
           </div>
         )}

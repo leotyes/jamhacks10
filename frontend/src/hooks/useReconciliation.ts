@@ -6,6 +6,7 @@ export interface ReconciliationResult {
   log: string;
   netlist: any;
   schematicUrl: string;
+  geometryUrl: string;
 }
 
 export function useReconciliation() {
@@ -41,6 +42,7 @@ export function useReconciliation() {
         log: response.data.reasoning_log,
         netlist: response.data.netlist,
         schematicUrl: response.data.schematic_url,
+        geometryUrl: response.data.geometry_url,
       });
     } catch (error) {
       console.error(error);

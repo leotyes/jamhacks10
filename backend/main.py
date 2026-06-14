@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from ai_vision.cv_layer import analyze_breadboard_from_bytes
 from schematic_generator import simplify_to_production, generate_netlist
+from schematic_geometry_generator import generate_kicad_pcb
 try:
     from services.ioc_parser import router as ioc_parser_router, parse_ioc_content
     from services.oauth3legtest import router as oauth3_router, get_access_token, product_search, enrich_product
@@ -53,6 +54,7 @@ class ReconciliationResponse(BaseModel):
     reasoning_log: str
     netlist: dict
     schematic_url: Optional[str] = None
+    geometry_url: Optional[str] = None
 
 class NetlistRequest(BaseModel):
     netlist: dict
@@ -496,20 +498,31 @@ async def reconcile_hardware(
 
     # Simplify to production-ready netlist and generate .net file
     download_url = ""
+    geometry_url = ""
     try:
         production_netlist = simplify_to_production(netlist_dict)
-        filename = f"circuit_{uuid.uuid4().hex[:8]}.net"
-        output_path = os.path.join(SCHEMATICS_DIR, filename)
+        uid = uuid.uuid4().hex[:8]
+        net_filename = f"circuit_{uid}.net"
+        output_path = os.path.join(SCHEMATICS_DIR, net_filename)
         generate_netlist(production_netlist, output_file=output_path)
-        download_url = f"http://127.0.0.1:8000/api/download-netlist/{filename}"
+        download_url = f"http://127.0.0.1:8000/api/download-netlist/{net_filename}"
     except Exception as e:
         print(f"[schematic_generator] Failed to simplify/generate netlist: {e}")
+
+    try:
+        geo_filename = f"circuit_{uuid.uuid4().hex[:8]}.kicad_pcb"
+        geo_output_path = os.path.join(SCHEMATICS_DIR, geo_filename)
+        generate_kicad_pcb(netlist_dict, cv_result, output_file=geo_output_path)
+        geometry_url = f"http://127.0.0.1:8000/api/download-geometry/{geo_filename}"
+    except Exception as e:
+        print(f"[schematic_geometry_generator] Failed to generate .kicad_pcb: {e}")
 
     return {
         "confidence": 1.0,
         "reasoning_log": json.dumps(ioc_result, indent=2) if isinstance(ioc_result, dict) else ioc_result,
         "netlist": netlist_dict,
-        "schematic_url": download_url
+        "schematic_url": download_url,
+        "geometry_url": geometry_url,
     }
 
 
@@ -539,6 +552,18 @@ def download_netlist(filename: str):
         file_path,
         media_type="application/octet-stream",
         filename="circuit.net"
+    )
+
+
+@app.get("/api/download-geometry/{filename}")
+def download_geometry(filename: str):
+    file_path = os.path.join(SCHEMATICS_DIR, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(
+        file_path,
+        media_type="application/octet-stream",
+        filename="circuit.kicad_pcb"
     )
 
 
