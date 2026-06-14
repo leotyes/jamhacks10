@@ -60,9 +60,14 @@ MP34DT01M_PIN_MAP: dict[str, str] = {
     "VDD":"1","GND":"2","CLK":"3","DOUT":"4",
 }
 
+ADAFRUIT4346_PIN_MAP: dict[str, str] = {
+    "VDD":"1","GND":"2","CLK":"3","DAT":"4",
+}
+
 _PIN_LOOKUP: dict[str, dict[str, str]] = {
-    "STM32H7A3ZIT6Q": STM32H7A3ZIT6Q_PIN_MAP,
-    "MP34DT01-M":     MP34DT01M_PIN_MAP,
+    "STM32H7A3ZIT6Q":               STM32H7A3ZIT6Q_PIN_MAP,
+    "MP34DT01-M":                   MP34DT01M_PIN_MAP,
+    "Adafruit 4346 PDM Microphone": ADAFRUIT4346_PIN_MAP,
 }
 
 
@@ -75,6 +80,82 @@ def _resolve_pin(hardware_model: str, pin_name: str) -> str:
         print(f"  WARNING: no pad mapping for {hardware_model} pin '{pin_name}' — left as-is")
         return pin_name
     return resolved
+
+
+# ── Footprint geometry ────────────────────────────────────────────────────────
+
+def _lqfp144_pad_xy(pad_num: int) -> tuple[float, float]:
+    """(x, y) mm offset from footprint origin for LQFP-144 pad (1-indexed)."""
+    SPAN  = 8.75   # ±8.75 mm: 36 pads × 0.5 mm pitch centred
+    PITCH = 0.5
+    DIST  = 11.5   # pad-centre distance from chip centre
+
+    if 1 <= pad_num <= 36:       # bottom row, left → right
+        return (round(-SPAN + (pad_num - 1) * PITCH, 3), DIST)
+    elif 37 <= pad_num <= 72:    # right column, top → bottom
+        return (DIST, round(SPAN - (pad_num - 37) * PITCH, 3))
+    elif 73 <= pad_num <= 108:   # top row, right → left
+        return (round(SPAN - (pad_num - 73) * PITCH, 3), -DIST)
+    elif 109 <= pad_num <= 144:  # left column, bottom → top
+        return (-DIST, round(-SPAN + (pad_num - 109) * PITCH, 3))
+    return (0.0, 0.0)
+
+
+def _vlga4_pad_xy(pad_num: int) -> tuple[float, float]:
+    """(x, y) mm offset for VLGA-4 2×2 pad grid."""
+    positions = {1: (-0.55, -0.825), 2: (0.55, -0.825),
+                 3: (-0.55,  0.825), 4: (0.55,  0.825)}
+    return positions.get(pad_num, (0.0, 0.0))
+
+
+def _pad_xy(hardware_model: str, pad_num: int) -> tuple[float, float]:
+    if hardware_model == "STM32H7A3ZIT6Q":
+        return _lqfp144_pad_xy(pad_num)
+    if hardware_model in ("MP34DT01-M", "Adafruit 4346 PDM Microphone"):
+        return _vlga4_pad_xy(pad_num)
+    return (0.0, 0.0)
+
+
+def _pad_size_rot(hardware_model: str, pad_num: int) -> tuple[float, float, int]:
+    """Return (width_mm, height_mm, rotation_deg)."""
+    if hardware_model == "STM32H7A3ZIT6Q":
+        # Left/right columns: rotate 90° so long axis is horizontal
+        if 37 <= pad_num <= 72 or 109 <= pad_num <= 144:
+            return (0.3, 1.5, 90)
+        return (0.3, 1.5, 0)
+    if hardware_model in ("MP34DT01-M", "Adafruit 4346 PDM Microphone"):
+        return (0.4, 0.65, 0)
+    return (0.5, 0.5, 0)
+
+
+def _emit_rect(lines: list[str], x1: float, y1: float, x2: float, y2: float,
+               layer: str, width: float) -> None:
+    corners = [(x1, y1), (x2, y1), (x2, y2), (x1, y2)]
+    for i in range(4):
+        ax, ay = corners[i]
+        bx, by = corners[(i + 1) % 4]
+        lines.append(f'    (fp_line (start {ax} {ay}) (end {bx} {by}) (layer "{layer}") (width {width}))')
+
+
+def _emit_fp_graphics(lines: list[str], hardware_model: str) -> None:
+    """Emit F.Fab, F.Courtyard, and F.SilkS outlines for the footprint."""
+    if hardware_model == "STM32H7A3ZIT6Q":
+        # Chip body on F.Fab (20 × 20 mm)
+        _emit_rect(lines, -10, -10, 10, 10, "F.Fab", 0.1)
+        # Pin-1 corner marker on F.Fab
+        lines.append('    (fp_line (start -10 9) (end -10 10) (layer "F.Fab") (width 0.2))')
+        lines.append('    (fp_line (start -10 10) (end -9 10) (layer "F.Fab") (width 0.2))')
+        # Courtyard (encloses all 144 pads)
+        _emit_rect(lines, -13.5, -13.5, 13.5, 13.5, "F.Courtyard", 0.05)
+        # Silkscreen body outline
+        _emit_rect(lines, -10.5, -10.5, 10.5, 10.5, "F.SilkS", 0.12)
+    elif hardware_model in ("MP34DT01-M", "Adafruit 4346 PDM Microphone"):
+        # Chip body on F.Fab (2 × 2.5 mm)
+        _emit_rect(lines, -1.0, -1.25, 1.0, 1.25, "F.Fab", 0.1)
+        # Courtyard
+        _emit_rect(lines, -1.5, -1.75, 1.5, 1.75, "F.Courtyard", 0.05)
+        # Silkscreen
+        _emit_rect(lines, -1.0, -1.25, 1.0, 1.25, "F.SilkS", 0.12)
 
 
 # ── LLM geometry inference ────────────────────────────────────────────────────
@@ -248,15 +329,21 @@ def generate_kicad_pcb(
         lines.append(f'    (property "Reference" "{cid}" (at 0 -3) (layer "F.SilkS"))')
         lines.append(f'    (property "Value" "{hw}" (at 0 3) (layer "F.Fab"))')
 
-        # Emit pads with net assignments
-        for pin_name, net_name in pins.items():
-            pad_num     = _resolve_pin(hw, pin_name)
-            net_code    = net_index.get(net_name, 0)
+        # Chip outline graphics (silkscreen, courtyard, fab layer)
+        _emit_fp_graphics(lines, hw)
 
-            # Very rough pad position — KiCad will use the footprint's actual geometry,
-            # this just needs to be present for net assignment. Real pad offsets come
-            # from the footprint library file when KiCad loads it.
-            lines.append(f'    (pad "{pad_num}" smd rect (at 0 0) (size 0.5 0.5) (layers "F.Cu" "F.Paste" "F.Mask")')
+        # Emit connected pads with correct positions, sizes, and net assignments
+        for pin_name, net_name in pins.items():
+            pad_num_str = _resolve_pin(hw, pin_name)
+            net_code    = net_index.get(net_name, 0)
+            try:
+                pad_num_int = int(pad_num_str)
+            except ValueError:
+                pad_num_int = 0
+            px, py       = _pad_xy(hw, pad_num_int)
+            pw, ph, prot = _pad_size_rot(hw, pad_num_int)
+            rot_str      = f" {prot}" if prot else ""
+            lines.append(f'    (pad "{pad_num_str}" smd rect (at {px} {py}{rot_str}) (size {pw} {ph}) (layers "F.Cu" "F.Paste" "F.Mask")')
             lines.append(f'      (net {net_code} "{net_name}")')
             lines.append(f'    )')
 
