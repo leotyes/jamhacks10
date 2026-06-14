@@ -64,10 +64,18 @@ ADAFRUIT4346_PIN_MAP: dict[str, str] = {
     "VDD":"1","GND":"2","CLK":"3","DAT":"4",
 }
 
+# NUCLEO board exposes GPIO names identical to the bare MCU, plus "3V3" which
+# is the 3.3 V header rail — routes to LQFP-144 pad 19 (VDD).
+NUCLEO_H7A3ZI_Q_PIN_MAP: dict[str, str] = {
+    **STM32H7A3ZIT6Q_PIN_MAP,
+    "3V3": "19",
+}
+
 _PIN_LOOKUP: dict[str, dict[str, str]] = {
     "STM32H7A3ZIT6Q":               STM32H7A3ZIT6Q_PIN_MAP,
     "MP34DT01-M":                   MP34DT01M_PIN_MAP,
     "Adafruit 4346 PDM Microphone": ADAFRUIT4346_PIN_MAP,
+    "NUCLEO-H7A3ZI-Q":              NUCLEO_H7A3ZI_Q_PIN_MAP,
 }
 
 
@@ -108,22 +116,26 @@ def _vlga4_pad_xy(pad_num: int) -> tuple[float, float]:
     return positions.get(pad_num, (0.0, 0.0))
 
 
+_LQFP_MODELS = ("STM32H7A3ZIT6Q", "NUCLEO-H7A3ZI-Q")
+_LGA4_MODELS  = ("MP34DT01-M", "Adafruit 4346 PDM Microphone")
+
+
 def _pad_xy(hardware_model: str, pad_num: int) -> tuple[float, float]:
-    if hardware_model == "STM32H7A3ZIT6Q":
+    if hardware_model in _LQFP_MODELS:
         return _lqfp144_pad_xy(pad_num)
-    if hardware_model in ("MP34DT01-M", "Adafruit 4346 PDM Microphone"):
+    if hardware_model in _LGA4_MODELS:
         return _vlga4_pad_xy(pad_num)
     return (0.0, 0.0)
 
 
 def _pad_size_rot(hardware_model: str, pad_num: int) -> tuple[float, float, int]:
     """Return (width_mm, height_mm, rotation_deg)."""
-    if hardware_model == "STM32H7A3ZIT6Q":
+    if hardware_model in _LQFP_MODELS:
         # Left/right columns: rotate 90° so long axis is horizontal
         if 37 <= pad_num <= 72 or 109 <= pad_num <= 144:
             return (0.3, 1.5, 90)
         return (0.3, 1.5, 0)
-    if hardware_model in ("MP34DT01-M", "Adafruit 4346 PDM Microphone"):
+    if hardware_model in _LGA4_MODELS:
         return (0.4, 0.65, 0)
     return (0.5, 0.5, 0)
 
@@ -139,8 +151,8 @@ def _emit_rect(lines: list[str], x1: float, y1: float, x2: float, y2: float,
 
 def _emit_fp_graphics(lines: list[str], hardware_model: str) -> None:
     """Emit F.Fab, F.Courtyard, and F.SilkS outlines for the footprint."""
-    if hardware_model == "STM32H7A3ZIT6Q":
-        # Chip body on F.Fab (20 × 20 mm)
+    if hardware_model in _LQFP_MODELS:
+        # Chip body on F.Fab (20 × 20 mm) — same outline for bare MCU and Nucleo
         _emit_rect(lines, -10, -10, 10, 10, "F.Fab", 0.1)
         # Pin-1 corner marker on F.Fab
         lines.append('    (fp_line (start -10 9) (end -10 10) (layer "F.Fab") (width 0.2))')
@@ -149,7 +161,7 @@ def _emit_fp_graphics(lines: list[str], hardware_model: str) -> None:
         _emit_rect(lines, -13.5, -13.5, 13.5, 13.5, "F.Courtyard", 0.05)
         # Silkscreen body outline
         _emit_rect(lines, -10.5, -10.5, 10.5, 10.5, "F.SilkS", 0.12)
-    elif hardware_model in ("MP34DT01-M", "Adafruit 4346 PDM Microphone"):
+    elif hardware_model in _LGA4_MODELS:
         # Chip body on F.Fab (2 × 2.5 mm)
         _emit_rect(lines, -1.0, -1.25, 1.0, 1.25, "F.Fab", 0.1)
         # Courtyard
@@ -247,6 +259,43 @@ def _pad_net(comp_id: str, pin_name: str, nets: list[dict]) -> tuple[str, int]:
     return "", 0
 
 
+def _emit_all_pads(
+    lines:     list[str],
+    hw:        str,
+    pins:      dict[str, str],
+    net_index: dict[str, int],
+) -> None:
+    """
+    Emit EVERY physical pad of the footprint — connected and unconnected.
+
+    Connected pads carry their net assignment; unconnected pads are written
+    bare so the full 144-pin LQFP ring or 4-pin LGA grid renders in KiCad
+    instead of just the handful of actively-wired GPIO pins.
+    """
+    total = 144 if hw in _LQFP_MODELS else 4
+
+    # Build pad_number_str → net_name from the component's connected pins
+    pad_to_net: dict[str, str] = {}
+    for pin_name, net_name in pins.items():
+        pad_str = _resolve_pin(hw, pin_name)
+        if pad_str.isdigit():
+            pad_to_net[pad_str] = net_name
+
+    for pad_num in range(1, total + 1):
+        pad_str  = str(pad_num)
+        net_name = pad_to_net.get(pad_str, "")
+        net_code = net_index.get(net_name, 0) if net_name else 0
+
+        px, py       = _pad_xy(hw, pad_num)
+        pw, ph, prot = _pad_size_rot(hw, pad_num)
+        rot_str      = f" {prot}" if prot else ""
+
+        lines.append(f'    (pad "{pad_str}" smd rect (at {px} {py}{rot_str}) (size {pw} {ph}) (layers "F.Cu" "F.Paste" "F.Mask")')
+        if net_code:
+            lines.append(f'      (net {net_code} "{net_name}")')
+        lines.append(f'    )')
+
+
 # ── .kicad_pcb writer ────────────────────────────────────────────────────────
 
 def generate_kicad_pcb(
@@ -332,20 +381,9 @@ def generate_kicad_pcb(
         # Chip outline graphics (silkscreen, courtyard, fab layer)
         _emit_fp_graphics(lines, hw)
 
-        # Emit connected pads with correct positions, sizes, and net assignments
-        for pin_name, net_name in pins.items():
-            pad_num_str = _resolve_pin(hw, pin_name)
-            net_code    = net_index.get(net_name, 0)
-            try:
-                pad_num_int = int(pad_num_str)
-            except ValueError:
-                pad_num_int = 0
-            px, py       = _pad_xy(hw, pad_num_int)
-            pw, ph, prot = _pad_size_rot(hw, pad_num_int)
-            rot_str      = f" {prot}" if prot else ""
-            lines.append(f'    (pad "{pad_num_str}" smd rect (at {px} {py}{rot_str}) (size {pw} {ph}) (layers "F.Cu" "F.Paste" "F.Mask")')
-            lines.append(f'      (net {net_code} "{net_name}")')
-            lines.append(f'    )')
+        # All physical pads — full 144-pin LQFP ring or 4-pin LGA grid.
+        # Connected pads carry their net; unconnected pads are bare.
+        _emit_all_pads(lines, hw, pins, net_index)
 
         lines.append('  )')
         lines.append('')

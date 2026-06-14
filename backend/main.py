@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from ai_vision.cv_layer import analyze_breadboard_from_bytes
 from schematic_generator import simplify_to_production, generate_netlist
 from schematic_geometry_generator import generate_kicad_pcb
+from hex_mic_array_generator import generate_hex_mic_board
 try:
     from services.ioc_parser import router as ioc_parser_router, parse_ioc_content
     from services.oauth3legtest import router as oauth3_router, get_access_token, product_search, enrich_product
@@ -565,6 +566,28 @@ def download_geometry(filename: str):
         media_type="application/octet-stream",
         filename="circuit.kicad_pcb"
     )
+
+
+class HexBoardResponse(BaseModel):
+    net_url: str
+    pcb_url: str
+
+
+@app.post("/api/generate-hex-board", response_model=HexBoardResponse)
+def generate_hex_board():
+    try:
+        net_path, pcb_path = generate_hex_mic_board(output_dir=SCHEMATICS_DIR)
+        net_filename = os.path.basename(net_path)
+        pcb_filename = os.path.basename(pcb_path)
+        return {
+            "net_url": f"http://127.0.0.1:8000/api/download-netlist/{net_filename}",
+            "pcb_url": f"http://127.0.0.1:8000/api/download-geometry/{pcb_filename}",
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
 
 
 if _ioc_parser_available:
