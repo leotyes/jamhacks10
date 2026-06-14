@@ -22,6 +22,7 @@ export function useReconciliation() {
     if (!iocFile || !sideImageFile || !topImageFile) return;
 
     setIsProcessing(true);
+    await new Promise(resolve => setTimeout(resolve, 10000));
     setStatusText('Parsing .ioc layout...');
 
     setTimeout(() => setStatusText('Analyzing breadboard images...'), 1000);
