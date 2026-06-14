@@ -397,6 +397,17 @@ def generate_kicad_pcb(
         # Connected pads carry their net; unconnected pads are bare.
         _emit_all_pads(lines, hw, pins, net_index)
 
+        # 3D model — derive path from the footprint library reference so KiCad
+        # resolves it against the user's local installation at open time.
+        if ":" in fp:
+            lib, fname = fp.split(":", 1)
+            model_path = f"${{KICAD7_3DMODEL_DIR}}/{lib}.3dshapes/{fname}.wrl"
+            lines.append(f'    (model "{model_path}"')
+            lines.append( '      (offset (xyz 0 0 0))')
+            lines.append( '      (scale (xyz 1 1 1))')
+            lines.append( '      (rotate (xyz 0 0 0))')
+            lines.append( '    )')
+
         lines.append('  )')
         lines.append('')
 
