@@ -128,137 +128,25 @@ async def reconcile_hardware(
         except json.JSONDecodeError:
             pass
 
-    # ioc_text = ioc_contents.decode("utf-8", errors="replace")
-    # ioc_result = parse_ioc_content(ioc_text) if parse_ioc_content else ""
-    ioc_result = """{
-        "mcu": "STM32H7A3ZIT6Q",
+    ioc_text = ioc_contents.decode("utf-8", errors="replace")
+    ioc_result = parse_ioc_content(ioc_text) if parse_ioc_content else ""
 
-        "pin_map": {
-            "PC14-OSC32_IN": {
-            "function": "RCC_OSC32_IN",
-            "peripheral": "RCC",
-            "semantic_hint": "clock_signal",
-            "confidence": 0.99
-            },
-            "PC15-OSC32_OUT": {
-            "function": "RCC_OSC32_OUT",
-            "peripheral": "RCC",
-            "semantic_hint": "clock_signal",
-            "confidence": 0.99
-            },
-            "PH0-OSC_IN": {
-            "function": "RCC_OSC_IN",
-            "peripheral": "RCC",
-            "semantic_hint": "clock_signal",
-            "confidence": 0.99
-            },
-            "PH1-OSC_OUT": {
-            "function": "RCC_OSC_OUT",
-            "peripheral": "RCC",
-            "semantic_hint": "clock_signal",
-            "confidence": 0.99
-            },
-            "PC1": {
-            "function": "DFSDM1_DATIN0",
-            "peripheral": "DFSDM1",
-            "semantic_hint": "digital_bus",
-            "confidence": 0.98
-            },
-            "PC3_C": {
-            "function": "DFSDM1_DATIN1",
-            "peripheral": "DFSDM1",
-            "semantic_hint": "digital_bus",
-            "confidence": 0.98
-            },
-            "PC5": {
-            "function": "DFSDM1_DATIN2",
-            "peripheral": "DFSDM1",
-            "semantic_hint": "digital_bus",
-            "confidence": 0.98
-            },
-            "PE4": {
-            "function": "DFSDM1_DATIN3",
-            "peripheral": "DFSDM1",
-            "semantic_hint": "digital_bus",
-            "confidence": 0.98
-            },
-            "PE10": {
-            "function": "DFSDM1_DATIN4",
-            "peripheral": "DFSDM1",
-            "semantic_hint": "digital_bus",
-            "confidence": 0.98
-            },
-            "PE12": {
-            "function": "DFSDM1_DATIN5",
-            "peripheral": "DFSDM1",
-            "semantic_hint": "digital_bus",
-            "confidence": 0.98
-            },
-            "PE9": {
-            "function": "DFSDM1_CKOUT",
-            "peripheral": "DFSDM1",
-            "semantic_hint": "digital_bus",
-            "confidence": 0.98
-            },
-            "PD8": {
-            "function": "USART3_TX",
-            "peripheral": "USART3",
-            "semantic_hint": "serial_communication",
-            "confidence": 0.99
-            },
-            "PD9": {
-            "function": "USART3_RX",
-            "peripheral": "USART3",
-            "semantic_hint": "serial_communication",
-            "confidence": 0.99
-            }
-        },
-
-        "peripherals": {
-            "USART3": {
-            "TX": "PD8",
-            "RX": "PD9"
-            },
-            "DFSDM1": {
-            "DATIN0": "PC1",
-            "DATIN1": "PC3_C",
-            "DATIN2": "PC5",
-            "DATIN3": "PE4",
-            "DATIN4": "PE10",
-            "DATIN5": "PE12",
-            "CKOUT": "PE9"
-            },
-            "RCC": {
-            "OSC32_IN": "PC14-OSC32_IN",
-            "OSC32_OUT": "PC15-OSC32_OUT",
-            "OSC_IN": "PH0-OSC_IN",
-            "OSC_OUT": "PH1-OSC_OUT"
-            }
-        },
-
-        "notes": [
-            "No physical wiring inferred",
-            "Power assumed to be handled externally by development board",
-            "All mappings derived strictly from CubeMX configuration"
-        ]
-    }"""
-
-    parts_search_results = {'4346 mems microphone': {'photo_url': 'https://mm.digikey.com/Volume0/opasdata/d220001/medias/images/4845/1528_4346.jpg', 'pins': ['VDD', 'GND', 'DAT', 'CLK'], 'wiring_notes': 'The Adafruit 4346 PDM Microphone Breakout connects via a 4-pin JST SH connector or solder pads. It requires a 1.8V to 3.3V power supply (VDD), ground (GND), a clock input (CLK) of 1 to 3.25 MHz, and provides a pulse density modulation data output (DAT). An on-board solder jumper allows selecting between Left and Right channels.'}}
-    # if parsed_parts and get_access_token and product_search:
-    #     try:
-    #         token = get_access_token()
-    #         for part in parsed_parts:
-    #             try:
-    #                 search_result = product_search(part, token)
-    #                 products = search_result.get("Products", [])
-    #                 if products:
-    #                     parts_search_results[part] = enrich_product(products[0])
-    #                 else:
-    #                     parts_search_results[part] = None
-    #             except Exception as e:
-    #                 parts_search_results[part] = {"error": str(e)}
-    #     except Exception as e:
-    #         parts_search_results = {"error": f"DigiKey auth failed: {str(e)}"}
+    parts_search_results = {}
+    if parsed_parts and get_access_token and product_search:
+        try:
+            token = get_access_token()
+            for part in parsed_parts:
+                try:
+                    search_result = product_search(part, token)
+                    products = search_result.get("Products", [])
+                    if products:
+                        parts_search_results[part] = enrich_product(products[0])
+                    else:
+                        parts_search_results[part] = None
+                except Exception as e:
+                    parts_search_results[part] = {"error": str(e)}
+        except Exception as e:
+            parts_search_results = {"error": f"DigiKey auth failed: {str(e)}"}
 
     # 1. CV — run the side and top photos together through the analysis pipeline,
     #    passing the enriched parts info so the model knows each component's pins.
@@ -278,13 +166,12 @@ async def reconcile_hardware(
                 mcu_type = parsed.get("mcu", "")
         except Exception as e:
             print(f"[ioc_parser] Failed to parse JSON from ioc_result: {e}")
-    # cv_result = analyze_breadboard_from_bytes(
-    #     [(side_image_bytes, side_image.content_type),
-    #      (top_image_bytes, top_image.content_type)],
-    #     mcu_type=mcu_type,
-    #     parts_info=parts_search_results if isinstance(parts_search_results, dict) else None,
-    # )
-    cv_result = {'circuit_description': 'A hexagonal array of six Adafruit 4346 PDM microphones connected via a central routing perfboard to an STM32 Nucleo-H7A3ZI-Q development board.', 'components': [{'id': 'NUCLEO', 'type': 'MCU_BOARD', 'hardware_model': 'NUCLEO-H7A3ZI-Q'}, {'id': 'CENTRAL_PERFBOARD', 'type': 'PERFBOARD', 'hardware_model': 'CUSTOM_PERFBOARD'}, {'id': 'HEX_N', 'type': 'MICROPHONE_BREAKOUT', 'hardware_model': 'Adafruit_4346_PDM_Microphone'}, {'id': 'HEX_NE', 'type': 'MICROPHONE_BREAKOUT', 'hardware_model': 'Adafruit_4346_PDM_Microphone'}, {'id': 'HEX_SE', 'type': 'MICROPHONE_BREAKOUT', 'hardware_model': 'Adafruit_4346_PDM_Microphone'}, {'id': 'HEX_S', 'type': 'MICROPHONE_BREAKOUT', 'hardware_model': 'Adafruit_4346_PDM_Microphone'}, {'id': 'HEX_SW', 'type': 'MICROPHONE_BREAKOUT', 'hardware_model': 'Adafruit_4346_PDM_Microphone'}, {'id': 'HEX_NW', 'type': 'MICROPHONE_BREAKOUT', 'hardware_model': 'Adafruit_4346_PDM_Microphone'}], 'connections': [{'wire_id': 'W01', 'signal_type': 'VCC', 'wire_color': 'Red', 'from_comp': 'HEX_N', 'from_header': None, 'from_pin_label': 'VDD', 'to_comp': 'CENTRAL_PERFBOARD', 'to_header': 'PERFBOARD', 'to_pin_label': 'VDD'}, {'wire_id': 'W02', 'signal_type': 'GND', 'wire_color': 'Black', 'from_comp': 'HEX_N', 'from_header': None, 'from_pin_label': 'GND', 'to_comp': 'CENTRAL_PERFBOARD', 'to_header': 'PERFBOARD', 'to_pin_label': 'GND'}, {'wire_id': 'W03', 'signal_type': 'CLK', 'wire_color': 'Yellow', 'from_comp': 'HEX_N', 'from_header': None, 'from_pin_label': 'CLK', 'to_comp': 'CENTRAL_PERFBOARD', 'to_header': 'PERFBOARD', 'to_pin_label': 'CLK'}, {'wire_id': 'W04', 'signal_type': 'DAT', 'wire_color': 'Blue', 'from_comp': 'HEX_N', 'from_header': None, 'from_pin_label': 'DAT', 'to_comp': 'CENTRAL_PERFBOARD', 'to_header': 'PERFBOARD', 'to_pin_label': 'DAT'}, {'wire_id': 'W05', 'signal_type': 'VCC', 'wire_color': 'Red', 'from_comp': 'HEX_NE', 'from_header': None, 'from_pin_label': 'VDD', 'to_comp': 'CENTRAL_PERFBOARD', 'to_header': 'PERFBOARD', 'to_pin_label': 'VDD'}, {'wire_id': 'W06', 'signal_type': 'GND', 'wire_color': 'Black', 'from_comp': 'HEX_NE', 'from_header': None, 'from_pin_label': 'GND', 'to_comp': 'CENTRAL_PERFBOARD', 'to_header': 'PERFBOARD', 'to_pin_label': 'GND'}, {'wire_id': 'W07', 'signal_type': 'CLK', 'wire_color': 'Yellow', 'from_comp': 'HEX_NE', 'from_header': None, 'from_pin_label': 'CLK', 'to_comp': 'CENTRAL_PERFBOARD', 'to_header': 'PERFBOARD', 'to_pin_label': 'CLK'}, {'wire_id': 'W08', 'signal_type': 'DAT', 'wire_color': 'Blue', 'from_comp': 'HEX_NE', 'from_header': None, 'from_pin_label': 'DAT', 'to_comp': 'CENTRAL_PERFBOARD', 'to_header': 'PERFBOARD', 'to_pin_label': 'DAT'}, {'wire_id': 'W09', 'signal_type': 'VCC', 'wire_color': 'Red', 'from_comp': 'HEX_SE', 'from_header': None, 'from_pin_label': 'VDD', 'to_comp': 'CENTRAL_PERFBOARD', 'to_header': 'PERFBOARD', 'to_pin_label': 'VDD'}, {'wire_id': 'W10', 'signal_type': 'GND', 'wire_color': 'Black', 'from_comp': 'HEX_SE', 'from_header': None, 'from_pin_label': 'GND', 'to_comp': 'CENTRAL_PERFBOARD', 'to_header': 'PERFBOARD', 'to_pin_label': 'GND'}, {'wire_id': 'W11', 'signal_type': 'CLK', 'wire_color': 'Yellow', 'from_comp': 'HEX_SE', 'from_header': None, 'from_pin_label': 'CLK', 'to_comp': 'CENTRAL_PERFBOARD', 'to_header': 'PERFBOARD', 'to_pin_label': 'CLK'}, {'wire_id': 'W12', 'signal_type': 'DAT', 'wire_color': 'Blue', 'from_comp': 'HEX_SE', 'from_header': None, 'from_pin_label': 'DAT', 'to_comp': 'CENTRAL_PERFBOARD', 'to_header': 'PERFBOARD', 'to_pin_label': 'DAT'}, {'wire_id': 'W13', 'signal_type': 'VCC', 'wire_color': 'Red', 'from_comp': 'HEX_S', 'from_header': None, 'from_pin_label': 'VDD', 'to_comp': 'CENTRAL_PERFBOARD', 'to_header': 'PERFBOARD', 'to_pin_label': 'VDD'}, {'wire_id': 'W14', 'signal_type': 'GND', 'wire_color': 'Black', 'from_comp': 'HEX_S', 'from_header': None, 'from_pin_label': 'GND', 'to_comp': 'CENTRAL_PERFBOARD', 'to_header': 'PERFBOARD', 'to_pin_label': 'GND'}, {'wire_id': 'W15', 'signal_type': 'CLK', 'wire_color': 'Yellow', 'from_comp': 'HEX_S', 'from_header': None, 'from_pin_label': 'CLK', 'to_comp': 'CENTRAL_PERFBOARD', 'to_header': 'PERFBOARD', 'to_pin_label': 'CLK'}, {'wire_id': 'W16', 'signal_type': 'DAT', 'wire_color': 'Blue', 'from_comp': 'HEX_S', 'from_header': None, 'from_pin_label': 'DAT', 'to_comp': 'CENTRAL_PERFBOARD', 'to_header': 'PERFBOARD', 'to_pin_label': 'DAT'}, {'wire_id': 'W17', 'signal_type': 'VCC', 'wire_color': 'Red', 'from_comp': 'HEX_SW', 'from_header': None, 'from_pin_label': 'VDD', 'to_comp': 'CENTRAL_PERFBOARD', 'to_header': 'PERFBOARD', 'to_pin_label': 'VDD'}, {'wire_id': 'W18', 'signal_type': 'GND', 'wire_color': 'Black', 'from_comp': 'HEX_SW', 'from_header': None, 'from_pin_label': 'GND', 'to_comp': 'CENTRAL_PERFBOARD', 'to_header': 'PERFBOARD', 'to_pin_label': 'GND'}, {'wire_id': 'W19', 'signal_type': 'CLK', 'wire_color': 'Yellow', 'from_comp': 'HEX_SW', 'from_header': None, 'from_pin_label': 'CLK', 'to_comp': 'CENTRAL_PERFBOARD', 'to_header': 'PERFBOARD', 'to_pin_label': 'CLK'}, {'wire_id': 'W20', 'signal_type': 'DAT', 'wire_color': 'Blue', 'from_comp': 'HEX_SW', 'from_header': None, 'from_pin_label': 'DAT', 'to_comp': 'CENTRAL_PERFBOARD', 'to_header': 'PERFBOARD', 'to_pin_label': 'DAT'}, {'wire_id': 'W21', 'signal_type': 'VCC', 'wire_color': 'Red', 'from_comp': 'HEX_NW', 'from_header': None, 'from_pin_label': 'VDD', 'to_comp': 'CENTRAL_PERFBOARD', 'to_header': 'PERFBOARD', 'to_pin_label': 'VDD'}, {'wire_id': 'W22', 'signal_type': 'GND', 'wire_color': 'Black', 'from_comp': 'HEX_NW', 'from_header': None, 'from_pin_label': 'GND', 'to_comp': 'CENTRAL_PERFBOARD', 'to_header': 'PERFBOARD', 'to_pin_label': 'GND'}, {'wire_id': 'W23', 'signal_type': 'CLK', 'wire_color': 'Yellow', 'from_comp': 'HEX_NW', 'from_header': None, 'from_pin_label': 'CLK', 'to_comp': 'CENTRAL_PERFBOARD', 'to_header': 'PERFBOARD', 'to_pin_label': 'CLK'}, {'wire_id': 'W24', 'signal_type': 'DAT', 'wire_color': 'Blue', 'from_comp': 'HEX_NW', 'from_header': None, 'from_pin_label': 'DAT', 'to_comp': 'CENTRAL_PERFBOARD', 'to_header': 'PERFBOARD', 'to_pin_label': 'DAT'}, {'wire_id': 'W25', 'signal_type': 'VCC', 'wire_color': 'Red', 'from_comp': 'CENTRAL_PERFBOARD', 'from_header': 'PERFBOARD', 'from_pin_label': 'VDD', 'to_comp': 'NUCLEO', 'to_header': 'CN8', 'to_pin_label': '3V3'}, {'wire_id': 'W26', 'signal_type': 'GND', 'wire_color': 'Black', 'from_comp': 'CENTRAL_PERFBOARD', 'from_header': 'PERFBOARD', 'from_pin_label': 'GND', 'to_comp': 'NUCLEO', 'to_header': 'CN9', 'to_pin_label': 'GND'}, {'wire_id': 'W27', 'signal_type': 'CLK', 'wire_color': 'Yellow', 'from_comp': 'CENTRAL_PERFBOARD', 'from_header': 'PERFBOARD', 'from_pin_label': 'CLK', 'to_comp': 'NUCLEO', 'to_header': 'CN9', 'to_pin_label': 'PC_3'}, {'wire_id': 'W28', 'signal_type': 'DAT', 'wire_color': 'Blue', 'from_comp': 'CENTRAL_PERFBOARD', 'from_header': 'PERFBOARD', 'from_pin_label': 'DAT', 'to_comp': 'NUCLEO', 'to_header': 'CN9', 'to_pin_label': 'PE_9'}, {'wire_id': 'W29', 'signal_type': 'DAT', 'wire_color': 'Blue', 'from_comp': 'CENTRAL_PERFBOARD', 'from_header': 'PERFBOARD', 'from_pin_label': 'DAT', 'to_comp': 'NUCLEO', 'to_header': 'CN9', 'to_pin_label': 'PE_4'}, {'wire_id': 'W30', 'signal_type': 'DAT', 'wire_color': 'Blue', 'from_comp': 'CENTRAL_PERFBOARD', 'from_header': 'PERFBOARD', 'from_pin_label': 'DAT', 'to_comp': 'NUCLEO', 'to_header': 'CN7', 'to_pin_label': 'PC_1'}, {'wire_id': 'W31', 'signal_type': 'DAT', 'wire_color': 'Blue', 'from_comp': 'CENTRAL_PERFBOARD', 'from_header': 'PERFBOARD', 'from_pin_label': 'DAT', 'to_comp': 'NUCLEO', 'to_header': 'CN7', 'to_pin_label': 'PC_5'}, {'wire_id': 'W32', 'signal_type': 'DAT', 'wire_color': 'Blue', 'from_comp': 'CENTRAL_PERFBOARD', 'from_header': 'PERFBOARD', 'from_pin_label': 'DAT', 'to_comp': 'NUCLEO', 'to_header': 'CN10', 'to_pin_label': 'PE_10'}, {'wire_id': 'W33', 'signal_type': 'DAT', 'wire_color': 'Blue', 'from_comp': 'CENTRAL_PERFBOARD', 'from_header': 'PERFBOARD', 'from_pin_label': 'DAT', 'to_comp': 'NUCLEO', 'to_header': 'CN10', 'to_pin_label': 'PE_12'}]}
+    cv_result = analyze_breadboard_from_bytes(
+        [(side_image_bytes, side_image.content_type),
+         (top_image_bytes, top_image.content_type)],
+        mcu_type=mcu_type,
+        parts_info=parts_search_results if isinstance(parts_search_results, dict) else None,
+    )
 
     # 2. DigiKey keyword search — one call per part in the manifest
     print("Digikey: ")
@@ -300,202 +187,21 @@ async def reconcile_hardware(
         digikey_result=json.dumps(parts_search_results, indent=2),
     )
     
-    # response = client.models.generate_content(
-    #     model="gemini-2.5-flash",
-    #     contents=prompt
-    # )
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt
+    )
 
-    # # Clean up code fences and load as a dictionary
-    # try:
-    #     resp_text = response.text.strip()
-    #     if "```" in resp_text:
-    #         resp_text = resp_text.split("```")[1].replace("json", "", 1).strip()
-    #     netlist_dict = json.loads(resp_text)
-    # except Exception as e:
-    #     print(f"[fusion] Failed to parse JSON: {e}")
-    #     # Fallback to avoid crashing the response validation schema
-    #     netlist_dict = {"error": f"Parsing failed: {str(e)}", "raw_response": response.text}
-    netlist_dict = {
-  "components": [
-    {
-      "id": "NUCLEO",
-      "type": "MCU_BOARD",
-      "hardware_model": "NUCLEO-H7A3ZI-Q",
-      "pins": {
-        "3V3": "VCC_3V3",
-        "GND": "GND",
-        "PE9": "DFSDM1_CKOUT",
-        "PC3": "DFSDM1_DATIN1_PC3",
-        "PE10": "DFSDM1_DATIN4",
-        "PE12": "DFSDM1_DATIN5",
-        "PE4": "DFSDM1_DATIN3",
-        "PC5": "DFSDM1_DATIN2",
-        "PC1": "DFSDM1_DATIN0"
-      }
-    },
-    {
-      "id": "HEX_N",
-      "type": "MICROPHONE",
-      "hardware_model": "Adafruit 4346 PDM Microphone",
-      "pins": {
-        "VDD": "VCC_3V3",
-        "GND": "GND",
-        "CLK": "DFSDM1_CKOUT",
-        "DAT": "DFSDM1_DATIN1_PC3"
-      }
-    },
-    {
-      "id": "HEX_NE",
-      "type": "MICROPHONE",
-      "hardware_model": "Adafruit 4346 PDM Microphone",
-      "pins": {
-        "VDD": "VCC_3V3",
-        "GND": "GND",
-        "CLK": "DFSDM1_CKOUT",
-        "DAT": "DFSDM1_DATIN4"
-      }
-    },
-    {
-      "id": "HEX_SE",
-      "type": "MICROPHONE",
-      "hardware_model": "Adafruit 4346 PDM Microphone",
-      "pins": {
-        "VDD": "VCC_3V3",
-        "GND": "GND",
-        "CLK": "DFSDM1_CKOUT",
-        "DAT": "DFSDM1_DATIN5"
-      }
-    },
-    {
-      "id": "HEX_S",
-      "type": "MICROPHONE",
-      "hardware_model": "Adafruit 4346 PDM Microphone",
-      "pins": {
-        "VDD": "VCC_3V3",
-        "GND": "GND",
-        "CLK": "DFSDM1_CKOUT",
-        "DAT": "DFSDM1_DATIN3"
-      }
-    },
-    {
-      "id": "HEX_SW",
-      "type": "MICROPHONE",
-      "hardware_model": "Adafruit 4346 PDM Microphone",
-      "pins": {
-        "VDD": "VCC_3V3",
-        "GND": "GND",
-        "CLK": "DFSDM1_CKOUT",
-        "DAT": "DFSDM1_DATIN2"
-      }
-    },
-    {
-      "id": "HEX_NW",
-      "type": "MICROPHONE",
-      "hardware_model": "Adafruit 4346 PDM Microphone",
-      "pins": {
-        "VDD": "VCC_3V3",
-        "GND": "GND",
-        "CLK": "DFSDM1_CKOUT",
-        "DAT": "DFSDM1_DATIN0"
-      }
-    }
-  ],
-  "nets": [
-    {
-      "name": "VCC_3V3",
-      "description": "Shared 3.3V supply, bussed through perfboard to all mics",
-      "connections": [
-        "HEX_N.VDD",
-        "HEX_NE.VDD",
-        "HEX_NW.VDD",
-        "HEX_S.VDD",
-        "HEX_SE.VDD",
-        "HEX_SW.VDD",
-        "NUCLEO.3V3"
-      ]
-    },
-    {
-      "name": "GND",
-      "description": "Shared ground, bussed through perfboard to all mics",
-      "connections": [
-        "HEX_N.GND",
-        "HEX_NE.GND",
-        "HEX_NW.GND",
-        "HEX_S.GND",
-        "HEX_SE.GND",
-        "HEX_SW.GND",
-        "NUCLEO.GND"
-      ]
-    },
-    {
-      "name": "DFSDM1_CKOUT",
-      "description": "IOC: DFSDM1_CKOUT on PE9, bussed through perfboard to all mic CLK pins",
-      "connections": [
-        "HEX_N.CLK",
-        "HEX_NE.CLK",
-        "HEX_NW.CLK",
-        "HEX_S.CLK",
-        "HEX_SE.CLK",
-        "HEX_SW.CLK",
-        "NUCLEO.PE9"
-      ]
-    },
-    {
-      "name": "DFSDM1_DATIN1_PC3",
-      "description": "IOC: DFSDM1_DATIN1 configured on PC3_C, but CV shows wired to PC3",
-      "connections": [
-        "HEX_N.DAT",
-        "NUCLEO.PC3"
-      ]
-    },
-    {
-      "name": "DFSDM1_DATIN4",
-      "description": "IOC: DFSDM1_DATIN4 on PE10",
-      "connections": [
-        "HEX_NE.DAT",
-        "NUCLEO.PE10"
-      ]
-    },
-    {
-      "name": "DFSDM1_DATIN5",
-      "description": "IOC: DFSDM1_DATIN5 on PE12",
-      "connections": [
-        "HEX_SE.DAT",
-        "NUCLEO.PE12"
-      ]
-    },
-    {
-      "name": "DFSDM1_DATIN3",
-      "description": "IOC: DFSDM1_DATIN3 on PE4",
-      "connections": [
-        "HEX_S.DAT",
-        "NUCLEO.PE4"
-      ]
-    },
-    {
-      "name": "DFSDM1_DATIN2",
-      "description": "IOC: DFSDM1_DATIN2 on PC5",
-      "connections": [
-        "HEX_SW.DAT",
-        "NUCLEO.PC5"
-      ]
-    },
-    {
-      "name": "DFSDM1_DATIN0",
-      "description": "IOC: DFSDM1_DATIN0 on PC1",
-      "connections": [
-        "HEX_NW.DAT",
-        "NUCLEO.PC1"
-      ]
-    }
-  ],
-  "notes": [
-    "IOC pin_map lists DFSDM1_DATIN1 on PC3_C, but CV shows HEX_N's DAT wired to PC3 (different pin) -- net DFSDM1_DATIN1_PC3 reflects CV wiring.",
-    "CV connection W27 reports 'CLK' signal type from CENTRAL_PERFBOARD to NUCLEO.PC_3, but the circuit's functional intent (and IOC config of PE9 as DFSDM1_CKOUT) suggests PE9 is the clock source for mics. This netlist assumes PE9 as the CLK source and PC3 as a DATIN, as per example output.",
-    "CV connection W28 reports 'DAT' signal type from CENTRAL_PERFBOARD to NUCLEO.PE_9, but the circuit's functional intent (and IOC config of PE9 as DFSDM1_CKOUT) suggests PE9 is the clock source, not a data input. This netlist assigns PE9 to DFSDM1_CKOUT, as per example output."
-  ]
-}
-
+    # Clean up code fences and load as a dictionary
+    try:
+        resp_text = response.text.strip()
+        if "```" in resp_text:
+            resp_text = resp_text.split("```")[1].replace("json", "", 1).strip()
+        netlist_dict = json.loads(resp_text)
+    except Exception as e:
+        print(f"[fusion] Failed to parse JSON: {e}")
+        # Fallback to avoid crashing the response validation schema
+        netlist_dict = {"error": f"Parsing failed: {str(e)}", "raw_response": response.text}
     # Simplify to production-ready netlist and generate .net file
     download_url = ""
     geometry_url = ""
