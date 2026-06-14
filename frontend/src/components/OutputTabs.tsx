@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Code2, Cpu, Network } from "lucide-react"
+import { Code2, Cpu, ChevronDown, ChevronUp } from "lucide-react"
 import { ScrambleTextOnHover } from "./ScrambleText"
 
 interface OutputTabsProps {
@@ -11,10 +11,57 @@ interface OutputTabsProps {
 const TABS = [
   { id: "netlist", label: "Validated Netlist", icon: Code2 },
   { id: "schematic", label: "Schematic Viewer", icon: Cpu },
-  { id: "graph", label: "Graph Explorer", icon: Network },
 ] as const
 
 type TabId = typeof TABS[number]["id"]
+
+const PREVIEW_LINES = 12
+
+function NetlistPanel({ netlist }: { netlist: any }) {
+  const [expanded, setExpanded] = useState(false)
+  const fullJson = JSON.stringify(netlist, null, 2)
+  const lines = fullJson.split("\n")
+  const previewJson = lines.slice(0, PREVIEW_LINES).join("\n")
+
+  return (
+    <div className="flex-1 p-4" data-lenis-prevent>
+      <div className="flex items-center gap-2 mb-4">
+        <div className="h-px bg-border flex-1" />
+        <span className="font-mono text-xs uppercase tracking-widest text-muted-foreground">JSON Output</span>
+        <div className="h-px bg-border flex-1" />
+      </div>
+
+      <div className="relative">
+        <pre className="font-mono text-xs text-foreground/80 leading-relaxed overflow-x-auto">
+          <code>{expanded ? fullJson : previewJson}</code>
+        </pre>
+
+        {/* Fade gradient when collapsed */}
+        {!expanded && (
+          <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-background to-transparent pointer-events-none" />
+        )}
+      </div>
+
+      {/* Expand / collapse button */}
+      <button
+        onClick={() => setExpanded(v => !v)}
+        className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 border border-border/60 hover:border-accent/60 text-muted-foreground hover:text-accent font-mono text-[10px] uppercase tracking-widest transition-all duration-200 bg-card/40 hover:bg-accent/5"
+      >
+        {expanded ? (
+          <>
+            <ChevronUp className="w-3.5 h-3.5" />
+            Collapse JSON
+          </>
+        ) : (
+          <>
+            <ChevronDown className="w-3.5 h-3.5" />
+            Show Full Netlist ({lines.length} lines)
+          </>
+        )}
+      </button>
+    </div>
+  )
+}
 
 export function OutputTabs({ netlist, schematicUrl, geometryUrl }: OutputTabsProps) {
   const [activeTab, setActiveTab] = useState<TabId>("netlist")
@@ -41,16 +88,7 @@ export function OutputTabs({ netlist, schematicUrl, geometryUrl }: OutputTabsPro
       {/* Content */}
       <div className="relative min-h-[380px] flex flex-col">
         {activeTab === "netlist" && (
-          <div className="flex-1 p-4 overflow-auto">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="h-px bg-border flex-1" />
-              <span className="font-mono text-xs uppercase tracking-widest text-muted-foreground">JSON Output</span>
-              <div className="h-px bg-border flex-1" />
-            </div>
-            <pre className="font-mono text-xs text-foreground/80 leading-relaxed">
-              <code>{JSON.stringify(netlist, null, 2)}</code>
-            </pre>
-          </div>
+          <NetlistPanel netlist={netlist} />
         )}
 
         {activeTab === "schematic" && (
@@ -106,28 +144,7 @@ export function OutputTabs({ netlist, schematicUrl, geometryUrl }: OutputTabsPro
           </div>
         )}
 
-        {activeTab === "graph" && (
-          <div className="flex-1 flex flex-col items-center justify-center gap-6">
-            {/* Animated node graph placeholder */}
-            <svg viewBox="0 0 200 140" className="w-64 opacity-20 text-foreground" fill="none">
-              <circle cx="100" cy="70" r="8" fill="currentColor" />
-              <circle cx="40" cy="30" r="5" fill="currentColor" />
-              <circle cx="160" cy="30" r="5" fill="currentColor" />
-              <circle cx="40" cy="110" r="5" fill="currentColor" />
-              <circle cx="160" cy="110" r="5" fill="currentColor" />
-              <line x1="100" y1="70" x2="40" y2="30" stroke="currentColor" strokeWidth="1" />
-              <line x1="100" y1="70" x2="160" y2="30" stroke="currentColor" strokeWidth="1" />
-              <line x1="100" y1="70" x2="40" y2="110" stroke="currentColor" strokeWidth="1" />
-              <line x1="100" y1="70" x2="160" y2="110" stroke="currentColor" strokeWidth="1" />
-            </svg>
-            <div className="text-center">
-              <p className="font-[family-name:var(--font-bebas)] text-2xl text-foreground tracking-tight">NETWORKX GRAPH</p>
-              <p className="font-mono text-xs text-muted-foreground mt-2 uppercase tracking-widest">
-                Interactive node graph explorer — coming soon
-              </p>
-            </div>
-          </div>
-        )}
+
       </div>
     </div>
   )

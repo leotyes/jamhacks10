@@ -114,7 +114,7 @@ export function Dashboard() {
             <div className="lg:col-span-8">
               {result ? (
                 <div className="flex flex-col gap-10">
-                  <DiagnosticsPanel confidence={result.confidence} log={result.log} />
+                  <DiagnosticsPanel netlist={result.netlist} />
 
                   <div>
                     <div className="h-px bg-border mb-8" />

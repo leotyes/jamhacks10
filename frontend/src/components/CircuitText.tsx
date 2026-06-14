@@ -21,7 +21,7 @@ type Particle = {
 type Connection = {
   a: number
   b: number
-  via: "h" | "v" // route direction: horizontal-first or vertical-first
+  via: "h" | "v" | "d" // route direction: horizontal-first, vertical-first, or direct diagonal
 }
 
 const ACCENT = "249,115,22"   // orange
@@ -73,6 +73,13 @@ export function CircuitText({ text, fontSize = 130, className }: CircuitTextProp
         return
       }
 
+      // Helper to check if a pixel coordinate is on the letter shape
+      const isAlphaSet = (x: number, y: number) => {
+        const cx = Math.max(0, Math.min(W - 1, Math.round(x)))
+        const cy = Math.max(0, Math.min(H - 1, Math.round(y)))
+        return data[(cy * W + cx) * 4 + 3] > 80
+      }
+
       // ── 2. Create particles, staggered left-to-right (circuit "signal flow") ──
       // Sort roughly by x so particles converge like a signal sweep
       targets.sort((a, b) => a.x - b.x + (Math.random() - 0.5) * GAP * 2)
@@ -106,8 +113,25 @@ export function CircuitText({ text, fontSize = 130, className }: CircuitTextProp
           const dy = particles[j].ty - particles[i].ty
           const d = Math.sqrt(dx * dx + dy * dy)
           if (d < CONN_DIST) {
-            // Choose routing: go horizontal first for mostly-horizontal neighbours
-            connections.push({ a: i, b: j, via: Math.abs(dx) >= Math.abs(dy) ? "h" : "v" })
+            const pa = particles[i]
+            const pb = particles[j]
+
+            // Check if right-angle elbows are on the letter shape to avoid bridging empty space
+            const routeH_ok = isAlphaSet(pb.tx, pa.ty)
+            const routeV_ok = isAlphaSet(pa.tx, pb.ty)
+
+            let via: "h" | "v" | "d" = "d"
+            if (routeH_ok && routeV_ok) {
+              via = Math.abs(dx) >= Math.abs(dy) ? "h" : "v"
+            } else if (routeH_ok) {
+              via = "h"
+            } else if (routeV_ok) {
+              via = "v"
+            } else {
+              via = "d" // fallback to diagonal trace to preserve letter boundaries
+            }
+
+            connections.push({ a: i, b: j, via })
           }
         }
       }
@@ -155,15 +179,18 @@ export function CircuitText({ text, fontSize = 130, className }: CircuitTextProp
             // horizontal then vertical
             ctx.lineTo(pb.x, pa.y)
             ctx.lineTo(pb.x, pb.y)
-          } else {
+          } else if (via === "v") {
             // vertical then horizontal
             ctx.lineTo(pa.x, pb.y)
+            ctx.lineTo(pb.x, pb.y)
+          } else {
+            // direct diagonal
             ctx.lineTo(pb.x, pb.y)
           }
           ctx.stroke()
 
           // Elbow junction dot
-          if (prog > 0.6) {
+          if (prog > 0.6 && via !== "d") {
             ctx.fillStyle = `rgba(${ACCENT},${prog * 0.7})`
             const jx = via === "h" ? pb.x : pa.x
             const jy = via === "h" ? pa.y : pb.y
