@@ -122,7 +122,7 @@ export function Dashboard() {
                     <h2 className="font-[family-name:var(--font-bebas)] text-4xl tracking-tight text-foreground mb-6">
                       GENERATED ARTIFACTS
                     </h2>
-                    <OutputTabs netlist={result.netlist} schematicUrl={result.schematicUrl} />
+                    <OutputTabs netlist={result.netlist} schematicUrl={result.schematicUrl} geometryUrl={result.geometryUrl} />
                   </div>
                 </div>
               ) : (

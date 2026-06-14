@@ -6,6 +6,7 @@ export interface ReconciliationResult {
   log: string;
   netlist: any;
   schematicUrl: string;
+  geometryUrl: string;
 }
 
 export function useReconciliation() {
@@ -21,6 +22,7 @@ export function useReconciliation() {
     if (!iocFile || !sideImageFile || !topImageFile) return;
 
     setIsProcessing(true);
+    await new Promise(resolve => setTimeout(resolve, 10000));
     setStatusText('Parsing .ioc layout...');
 
     setTimeout(() => setStatusText('Analyzing breadboard images...'), 1000);
@@ -41,6 +43,7 @@ export function useReconciliation() {
         log: response.data.reasoning_log,
         netlist: response.data.netlist,
         schematicUrl: response.data.schematic_url,
+        geometryUrl: response.data.geometry_url,
       });
     } catch (error) {
       console.error(error);

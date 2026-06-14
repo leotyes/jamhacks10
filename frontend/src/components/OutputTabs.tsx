@@ -5,6 +5,7 @@ import { ScrambleTextOnHover } from "./ScrambleText"
 interface OutputTabsProps {
   netlist: any
   schematicUrl?: string
+  geometryUrl?: string
 }
 
 const TABS = [
@@ -62,7 +63,7 @@ function NetlistPanel({ netlist }: { netlist: any }) {
   )
 }
 
-export function OutputTabs({ netlist, schematicUrl }: OutputTabsProps) {
+export function OutputTabs({ netlist, schematicUrl, geometryUrl }: OutputTabsProps) {
   const [activeTab, setActiveTab] = useState<TabId>("netlist")
 
   return (
@@ -91,27 +92,54 @@ export function OutputTabs({ netlist, schematicUrl }: OutputTabsProps) {
         )}
 
         {activeTab === "schematic" && (
-          <div className="flex-1 flex flex-col items-center justify-center p-12 gap-4">
-            <div className="w-16 h-16 border border-border flex items-center justify-center bg-card mb-2">
-              <Cpu className="w-8 h-8 text-accent" />
+          <div className="flex-1 flex flex-col items-center justify-center p-8 gap-6">
+            <div className="w-full max-w-lg border border-border bg-card relative overflow-hidden group">
+              {/* Mock circuit SVG */}
+              <svg viewBox="0 0 200 120" className="w-full opacity-25 text-accent" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <line x1="10" y1="60" x2="40" y2="60" />
+                <rect x="40" y="45" width="30" height="30" />
+                <text x="55" y="64" fill="currentColor" fontSize="8" textAnchor="middle" stroke="none">U1</text>
+                <line x1="70" y1="60" x2="100" y2="60" />
+                <circle cx="107" cy="60" r="7" />
+                <line x1="114" y1="60" x2="144" y2="60" />
+                <rect x="144" y="50" width="10" height="20" />
+                <line x1="154" y1="60" x2="190" y2="60" />
+                <line x1="190" y1="60" x2="190" y2="100" />
+                <line x1="10" y1="100" x2="190" y2="100" />
+                <line x1="10" y1="60" x2="10" y2="100" />
+              </svg>
+              {/* Hover download overlay */}
+              <div className="absolute inset-0 bg-background/80 flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 backdrop-blur-sm">
+                {schematicUrl ? (
+                  <a
+                    href={schematicUrl}
+                    download="circuit.net"
+                    className="border border-accent text-accent font-mono text-[10px] uppercase tracking-widest px-6 py-3 hover:bg-accent hover:text-accent-foreground transition-colors text-center"
+                  >
+                    <ScrambleTextOnHover text="Download .net File" />
+                  </a>
+                ) : (
+                  <button className="border border-border text-muted-foreground font-mono text-[10px] uppercase tracking-widest px-6 py-3 cursor-not-allowed">
+                    No Netlist Generated
+                  </button>
+                )}
+                {geometryUrl ? (
+                  <a
+                    href={geometryUrl}
+                    download="circuit.kicad_pcb"
+                    className="border border-accent text-accent font-mono text-[10px] uppercase tracking-widest px-6 py-3 hover:bg-accent hover:text-accent-foreground transition-colors text-center"
+                  >
+                    <ScrambleTextOnHover text="Download .kicad_pcb" />
+                  </a>
+                ) : (
+                  <button className="border border-border text-muted-foreground font-mono text-[10px] uppercase tracking-widest px-6 py-3 cursor-not-allowed">
+                    No PCB Generated
+                  </button>
+                )}
+              </div>
             </div>
-            
-            {schematicUrl ? (
-              <a
-                href={schematicUrl}
-                download="circuit.net"
-                className="border border-accent text-accent font-mono text-[10px] uppercase tracking-widest px-8 py-3 hover:bg-accent hover:text-accent-foreground transition-all duration-200 text-center shadow-lg hover:shadow-accent/20"
-              >
-                <ScrambleTextOnHover text="Download KiCad .net File" />
-              </a>
-            ) : (
-              <button className="border border-border text-muted-foreground font-mono text-[10px] uppercase tracking-widest px-8 py-3 cursor-not-allowed">
-                No Netlist Generated
-              </button>
-            )}
-
-            <p className="font-mono text-xs text-muted-foreground text-center uppercase tracking-widest max-w-sm mt-1">
-              Generated KiCad Netlist. Ready for schematic routing.
+            <p className="font-mono text-xs text-muted-foreground text-center uppercase tracking-widest max-w-sm">
+              Generated KiCad Netlist &amp; PCB. Hover to download source files.
             </p>
           </div>
         )}
