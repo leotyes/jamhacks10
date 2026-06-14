@@ -14,8 +14,7 @@ from pydantic import BaseModel
 
 from ai_vision.cv_layer import analyze_breadboard_from_bytes
 from schematic_generator import simplify_to_production, generate_netlist
-from schematic_geometry_generator import generate_kicad_pcb
-from hex_mic_array_generator import generate_hex_mic_board
+from schematic_geometry_generator import generate_kicad_pcb, generate_hex_mic_board
 try:
     from services.ioc_parser import router as ioc_parser_router, parse_ioc_content
     from services.oauth3legtest import router as oauth3_router, get_access_token, product_search, enrich_product

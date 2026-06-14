@@ -116,8 +116,10 @@ def _vlga4_pad_xy(pad_num: int) -> tuple[float, float]:
     return positions.get(pad_num, (0.0, 0.0))
 
 
-_LQFP_MODELS = ("STM32H7A3ZIT6Q", "NUCLEO-H7A3ZI-Q")
+_LQFP_MODELS  = ("STM32H7A3ZIT6Q", "NUCLEO-H7A3ZI-Q")
 _LGA4_MODELS  = ("MP34DT01-M", "Adafruit 4346 PDM Microphone")
+_HEX_MIC_IDS  = ["HEX_N", "HEX_NE", "HEX_SE", "HEX_S", "HEX_SW", "HEX_NW"]
+_HEX_DAT_PINS = ["PC1", "PC3", "PC5", "PE4", "PE10", "PE12"]
 
 
 def _pad_xy(hardware_model: str, pad_num: int) -> tuple[float, float]:
@@ -158,14 +160,14 @@ def _emit_fp_graphics(lines: list[str], hardware_model: str) -> None:
         lines.append('    (fp_line (start -10 9) (end -10 10) (layer "F.Fab") (width 0.2))')
         lines.append('    (fp_line (start -10 10) (end -9 10) (layer "F.Fab") (width 0.2))')
         # Courtyard (encloses all 144 pads)
-        _emit_rect(lines, -13.5, -13.5, 13.5, 13.5, "F.Courtyard", 0.05)
+        _emit_rect(lines, -13.5, -13.5, 13.5, 13.5, "F.CrtYd", 0.05)
         # Silkscreen body outline
         _emit_rect(lines, -10.5, -10.5, 10.5, 10.5, "F.SilkS", 0.12)
     elif hardware_model in _LGA4_MODELS:
         # Chip body on F.Fab (2 × 2.5 mm)
         _emit_rect(lines, -1.0, -1.25, 1.0, 1.25, "F.Fab", 0.1)
         # Courtyard
-        _emit_rect(lines, -1.5, -1.75, 1.5, 1.75, "F.Courtyard", 0.05)
+        _emit_rect(lines, -1.5, -1.75, 1.5, 1.75, "F.CrtYd", 0.05)
         # Silkscreen
         _emit_rect(lines, -1.0, -1.25, 1.0, 1.25, "F.SilkS", 0.12)
 
@@ -221,7 +223,7 @@ Component ids to place: {comp_ids}"""
 
 def _default_hex_placement(components: list[dict]) -> dict[str, tuple[float, float]]:
     """Fallback: deterministic hex layout if LLM fails."""
-    HEX_ORDER = ["HEX_N", "HEX_NE", "HEX_SE", "HEX_S", "HEX_SW", "HEX_NW"]
+    HEX_ORDER = _HEX_MIC_IDS
     ANGLES    = [90,       30,        -30,       -90,      -150,      150]
     CENTER = (50.0, 50.0)
     RADIUS = 30.0
@@ -348,6 +350,10 @@ def generate_kicad_pcb(
         (39, "F.Mask",    "user"),
         (44, "Edge.Cuts", "user"),
         (45, "Margin",    "user"),
+        (46, "B.CrtYd",  "user"),
+        (47, "F.CrtYd",  "user"),
+        (48, "B.Fab",    "user"),
+        (49, "F.Fab",    "user"),
     ]:
         lines.append(f'    ({num} "{name}" {ltype})')
     lines.append('  )')
@@ -372,9 +378,15 @@ def generate_kicad_pcb(
             print(f"  WARNING: no footprint for {cid} ({hw}), skipping")
             continue
 
+        if cid in _HEX_MIC_IDS:
+            rotation = _HEX_MIC_IDS.index(cid) * 60
+            at_str = f'{x} {y} {rotation}'
+        else:
+            at_str = f'{x} {y}'
+
         lines.append(f'  (footprint "{fp}"')
         lines.append(f'    (layer "F.Cu")')
-        lines.append(f'    (at {x} {y})')
+        lines.append(f'    (at {at_str})')
         lines.append(f'    (property "Reference" "{cid}" (at 0 -3) (layer "F.SilkS"))')
         lines.append(f'    (property "Value" "{hw}" (at 0 3) (layer "F.Fab"))')
 
@@ -404,6 +416,93 @@ def generate_kicad_pcb(
 
     Path(output_file).write_text("\n".join(lines), encoding="utf-8")
     print(f"Generated: {output_file}")
+
+
+# ── Hex mic array — circuit builder, netlist writer, public API ───────────────
+
+def _build_hex_circuit() -> dict:
+    """Build the hex mic array circuit dict (NUCLEO + 6 Adafruit 4346 mics)."""
+    components: list[dict] = []
+    nets_acc: dict[str, list[str]] = {}
+
+    def wire(comp_id: str, pin: str, net: str) -> None:
+        nets_acc.setdefault(net, []).append(f"{comp_id}.{pin}")
+
+    mcu_pins: dict[str, str] = {}
+    for mcu_pin, net_name in [("3V3", "VCC_3V3"), ("GND", "GND"), ("PE9", "DFSDM1_CKOUT")]:
+        mcu_pins[mcu_pin] = net_name
+        wire("NUCLEO", mcu_pin, net_name)
+    for i, dat_pin in enumerate(_HEX_DAT_PINS):
+        net_name = f"DFSDM1_DATIN{i}"
+        mcu_pins[dat_pin] = net_name
+        wire("NUCLEO", dat_pin, net_name)
+    components.append({
+        "id": "NUCLEO", "type": "MCU_BOARD",
+        "hardware_model": "NUCLEO-H7A3ZI-Q", "pins": mcu_pins,
+    })
+
+    for i, mic_id in enumerate(_HEX_MIC_IDS):
+        dat_net = f"DFSDM1_DATIN{i}"
+        mic_pins: dict[str, str] = {
+            "VDD": "VCC_3V3", "GND": "GND", "CLK": "DFSDM1_CKOUT", "DAT": dat_net,
+        }
+        for pin, net_name in mic_pins.items():
+            wire(mic_id, pin, net_name)
+        components.append({
+            "id": mic_id, "type": "MICROPHONE",
+            "hardware_model": "Adafruit 4346 PDM Microphone", "pins": mic_pins,
+        })
+
+    nets = [{"name": name, "connections": conns} for name, conns in nets_acc.items()]
+    return {"components": components, "nets": nets}
+
+
+def _write_hex_netlist(circuit: dict, output_path: str) -> None:
+    """Write a KiCad .net file for the hex mic circuit."""
+    hw_by_id = {c["id"]: c["hardware_model"] for c in circuit["components"]}
+    lines: list[str] = ["(export (version D)"]
+    lines.append("  (components")
+    for comp in circuit["components"]:
+        hw = comp["hardware_model"]
+        fp = FOOTPRINT_MAP.get(hw, "")
+        lines.append(f'    (comp (ref "{comp["id"]}")')
+        lines.append(f'      (value "{hw}")')
+        lines.append(f'      (footprint "{fp}")')
+        lines.append( '    )')
+    lines.append("  )")
+    lines.append("  (nets")
+    for i, net in enumerate(circuit["nets"]):
+        lines.append(f'    (net (code "{i + 1}") (name "{net["name"]}")')
+        for node in net["connections"]:
+            comp_id, pin_name = node.split(".", 1)
+            hw  = hw_by_id.get(comp_id, "")
+            pad = _resolve_pin(hw, pin_name)
+            lines.append(f'      (node (ref "{comp_id}") (pin "{pad}"))')
+        lines.append('    )')
+    lines.append("  )")
+    lines.append(")")
+    Path(output_path).write_text("\n".join(lines), encoding="utf-8")
+
+
+def generate_hex_mic_board(
+    output_dir: str = "schematics",
+    uid: str | None = None,
+) -> tuple[str, str]:
+    """
+    Full pipeline for the hex mic array: build circuit → write .net → write .kicad_pcb.
+
+    Returns (net_path, pcb_path) as absolute paths.
+    Placement uses the hardcoded positions from infer_placement().
+    """
+    import uuid as _uuid
+    os.makedirs(output_dir, exist_ok=True)
+    suffix   = uid or _uuid.uuid4().hex[:8]
+    net_path = os.path.join(output_dir, f"hex_mic_{suffix}.net")
+    pcb_path = os.path.join(output_dir, f"hex_mic_{suffix}.kicad_pcb")
+    circuit  = _build_hex_circuit()
+    _write_hex_netlist(circuit, net_path)
+    generate_kicad_pcb(circuit, {}, output_file=pcb_path)
+    return (os.path.abspath(net_path), os.path.abspath(pcb_path))
 
 
 # ── CLI entry point ───────────────────────────────────────────────────────────
