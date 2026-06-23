@@ -9,6 +9,8 @@ export interface ReconciliationResult {
   geometryUrl: string;
 }
 
+const API_URL = import.meta.env.VITE_API_URL;
+
 export function useReconciliation() {
   const [iocFile, setIocFile] = useState<File | null>(null);
   const [sideImageFile, setSideImageFile] = useState<File | null>(null);
@@ -23,6 +25,7 @@ export function useReconciliation() {
 
     setIsProcessing(true);
     await new Promise(resolve => setTimeout(resolve, 10000));
+
     setStatusText('Parsing .ioc layout...');
 
     setTimeout(() => setStatusText('Analyzing breadboard images...'), 1000);
@@ -36,7 +39,10 @@ export function useReconciliation() {
       formData.append('top_image', topImageFile);
       formData.append('parts', JSON.stringify(parts));
 
-      const response = await axios.post('http://127.0.0.1:8000/api/reconcile', formData);
+      const response = await axios.post(
+        `${API_URL}/api/reconcile`,
+        formData
+      );
 
       setResult({
         confidence: response.data.confidence,
