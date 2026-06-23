@@ -204,12 +204,11 @@ Example output format:
 
 Component ids to place: {comp_ids}"""
 
-    # response = client.models.generate_content(
-    #     model="gemini-2.5-flash",
-    #     contents=prompt
-    # )
-    # text = response.text.strip()
-    text = """{"NUCLEO": [101, 50], "HEX_N": [50, 80], "HEX_NE": [76, 65], "HEX_SE": [76, 35], "HEX_S": [50, 20], "HEX_SW": [24, 35], "HEX_NW": [24, 65]}"""
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt
+    )
+    text = response.text.strip()
     if text.startswith("```"):
         text = "\n".join(text.splitlines()[1:-1])
 
